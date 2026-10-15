@@ -1,0 +1,12 @@
+[profile.default]
+fail-fast = false
+slow-timeout = { period = "30s", terminate-after = 4 }
+
+[test-groups]
+pty = { max-threads = 4 }
+
+# Tests that drive a real PTY wait on rendered frames, so they share a small concurrency budget.
+[[profile.default.overrides]]
+filter = "test(/(^|[_:])pty($|[_:])/) | (kind(test) & test(/^native_visible_stdio::/))"
+test-group = "pty"
+slow-timeout = { period = "60s", terminate-after = 3 }
