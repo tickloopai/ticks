@@ -18,7 +18,7 @@ Install one with `tickloop tick install <package>`.
 
 | Package | Version | Description |
 | --- | --- | --- |
-| `futu` | 0.2.0 | Futu OpenD option chains, option pricing and implied volatility |
+| `futu` | 0.2.1 | Futu OpenD option chains, option pricing and implied volatility |
 | `longbridge` | 0.2.1 | Longbridge quotes, watchlist, kline, positions, news, earnings and community posts |
 
 ## Layout
