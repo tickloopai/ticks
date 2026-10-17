@@ -18,12 +18,12 @@
     },
     {
       "name": "longbridge",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "description": "Longbridge quotes, watchlist, kline, positions, news, earnings and community posts",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.1/tick-longbridge-0.2.1-aarch64-apple-darwin.tar.gz",
-          "sha256": "d06ceb39e677468c2ab6b2bf1eb974c161894b415c1c221aaa099dc658a5428f"
+          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.3/tick-longbridge-0.2.3-aarch64-apple-darwin.tar.gz",
+          "sha256": "72fa18819049f433541c98beb2c455fd71e3513af64ef8cff077e616b6a28e0e"
         }
       }
     }
