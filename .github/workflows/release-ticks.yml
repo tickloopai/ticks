@@ -5,6 +5,8 @@ on:
   push:
     tags:
       - '*-v*'
+  # Started on a tag by the Release workflow, whose GITHUB_TOKEN tag pushes start no workflow.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -43,7 +45,13 @@ jobs:
         run: node --test scripts/release.test.mjs scripts/release-ticks.test.mjs
 
       - name: Validate release tag
+        env:
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
         run: |
+          if [ "$RELEASE_REF_TYPE" != tag ]; then
+            echo "::error::Run this workflow on a <package>-vX.Y.Z tag, not the branch $RELEASE_TAG"
+            exit 1
+          fi
           if ! printf '%s\n' "$RELEASE_TAG" | grep -Eqx '[a-z][a-z0-9-]*-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'; then
             echo "::error::Expected a <package>-vX.Y.Z release tag, not $RELEASE_TAG"
             exit 1

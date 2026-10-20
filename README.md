@@ -73,6 +73,8 @@ VERSION=0.3.0 make release TICK_PACKAGES=futu  # an explicit, higher version
 node scripts/release.mjs --check               # preview; changes nothing
 ```
 
+To release from GitHub instead, run the **Release** workflow from the Actions tab on the default branch, with the packages (empty for every package) and an optional version. It runs `make release` there and then starts the release workflow below on each tag it pushed, since tags pushed with a workflow's `GITHUB_TOKEN` start no workflow by themselves.
+
 Versions come from each package's `Cargo.toml`, kept in step with its `tick-package.json` and `Cargo.lock`, independently of other packages and of Tickloop. The release runs from the committed `HEAD` of a branch that includes `origin`'s commits (pull first: the workflow commits marketplace updates there); other working-tree changes are left alone. In a temporary checkout it bumps the selected versions and runs `cargo check`, then commits the version files as one `chore(release): …`, creates one `<package>-v<version>` tag per package on that commit, and pushes the branch and tags atomically, at most three tags per push. A version must be newer than the package's existing tags and its `marketplace.json` entry.
 
 Each tag starts the release workflow, queued one package at a time:
