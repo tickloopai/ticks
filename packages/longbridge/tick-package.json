@@ -1,6 +1,6 @@
 {
   "name": "longbridge",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Longbridge quotes, watchlist, kline, positions, news, earnings and community posts",
   "executable": "bin/tick-longbridge",
   "protocol": true,
