@@ -7,12 +7,12 @@
   "packages": [
     {
       "name": "futu",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "description": "Futu OpenD option chains, option pricing and implied volatility",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.3/tick-futu-0.2.3-aarch64-apple-darwin.tar.gz",
-          "sha256": "3a03d58796842b3b764649c9e381021b1f3c86424108e686be4f36703afa6adf"
+          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.4/tick-futu-0.2.4-aarch64-apple-darwin.tar.gz",
+          "sha256": "dda633f6d3f9776b3acb74f4dc37513251daee546112e2d8192dfe68bed5b9f1"
         }
       }
     },
