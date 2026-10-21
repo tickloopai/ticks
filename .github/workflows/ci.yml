@@ -17,11 +17,16 @@ env:
 
 # The packages depend on the Tickloop crates in tickloopai/tickloop through Git; fetching them
 # needs that repository to be public (or a token with read access configured for Cargo).
-# macOS only: the packages are built and tested for macOS, the only platform they ship for.
+# The packages ship for macOS and Linux, so both run the whole suite; Linux also lints the static
+# musl target the Linux packages are released for.
 jobs:
   test:
-    name: Format, lint and test
-    runs-on: macos-15
+    name: Format, lint and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
     timeout-minutes: 60
     steps:
       - name: Check out
@@ -34,10 +39,17 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install musl-tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
       - name: Set up Rust
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt,clippy
           rustup default stable
+          if [ "$RUNNER_OS" = Linux ]; then rustup target add x86_64-unknown-linux-musl; fi
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
@@ -60,6 +72,10 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Clippy for the released Linux target
+        if: runner.os == 'Linux'
+        run: cargo clippy --locked --workspace --all-targets --target x86_64-unknown-linux-musl -- -D warnings
 
       - name: Test
         run: make test

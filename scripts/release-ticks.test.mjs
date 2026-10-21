@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const scripts = dirname(fileURLToPath(import.meta.url));
+const targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"];
 function run(program, args, setup) {
   const result = spawnSync(program, args, { cwd: setup.root, env: setup.env, encoding: "utf8" });
   if (result.error) throw result.error;
@@ -28,8 +29,9 @@ function fixture(t) {
   const originalFutu = { name: "futu", version: "0.3.0", description: "Futu", downloads: { "aarch64-apple-darwin": { url: "https://example.test/futu.tar.gz", sha256: "original" } } };
   writeFileSync(join(market, "marketplace.json"), JSON.stringify({ name: "Tickloop", packages: [originalFutu] }) + "\n");
   writeFileSync(join(market, "README.md"), "# Tick packages\n\n## Packages\n\nOld list\n\n## Building from source\n\nKept\n");
-  const archiveName = "tick-longbridge-0.2.1-aarch64-apple-darwin.tar.gz";
-  writeFileSync(join(archives, archiveName), "the selected package archive\n");
+  const archiveNames = targets.map(target => `tick-longbridge-0.2.1-${target}.tar.gz`);
+  for (const name of archiveNames) writeFileSync(join(archives, name), `the selected package archive ${name}\n`);
+  const archiveName = archiveNames[0];
   const mock = `#!/usr/bin/env node
 const fs = require('node:fs'), path = require('node:path');
 const args = process.argv.slice(2), store = process.env.RELEASE_TEST_STORE;
@@ -39,11 +41,13 @@ if (path.basename(process.argv[1]) === 'curl') {
   const parts = url.pathname.split('/');
   fs.copyFileSync(path.join(store, parts.at(-2), parts.at(-1)), args[args.indexOf('-o')+1]);
 } else {
-  const [kind, action, tag, archive] = args;
+  const [kind, action, tag] = args;
   if (kind !== 'release') process.exit(2);
   const target = path.join(store, tag);
-  if (action === 'view') { if (!fs.existsSync(target)) { console.error('release not found'); process.exit(1); } }
-  else if (action === 'create') { fs.mkdirSync(target); fs.copyFileSync(archive, path.join(target,path.basename(archive))); }
+  const files = args.slice(3, args.findIndex((arg, index) => index >= 3 && arg.startsWith('--')));
+  if (action === 'view') { if (!fs.existsSync(target)) { console.error('release not found'); process.exit(1); } if (args.includes('--json')) console.log(fs.readdirSync(target).join('\\n')); }
+  else if (action === 'create') { fs.mkdirSync(target); for (const file of files) fs.copyFileSync(file, path.join(target,path.basename(file))); }
+  else if (action === 'upload') { for (const file of files) fs.copyFileSync(file, path.join(target,path.basename(file))); }
   else if (action === 'download') { const directory = args[args.indexOf('--dir')+1]; fs.mkdirSync(directory,{recursive:true}); fs.copyFileSync(path.join(target,args[args.indexOf('--pattern')+1]),path.join(directory,args[args.indexOf('--pattern')+1])); }
   else process.exit(2);
 }
@@ -51,7 +55,7 @@ if (path.basename(process.argv[1]) === 'curl') {
   for (const program of ["gh", "curl"]) { writeFileSync(join(bin, program), mock); chmodSync(join(bin, program), 0o700); }
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", RELEASE_TAG: "longbridge-v0.2.1", RELEASE_COMMIT: "a".repeat(40), GITHUB_REPOSITORY: "tickloopai/ticks", RELEASE_TEST_STORE: releases, RELEASE_TEST_CALLS: join(root, "calls.log") };
   delete env.GITHUB_STEP_SUMMARY; delete env.GIT_DIR; delete env.GIT_WORK_TREE; delete env.GIT_INDEX_FILE;
-  const setup = { root, market, archives, archiveName, originalFutu, env };
+  const setup = { root, market, archives, archiveName, archiveNames, releases, originalFutu, env };
   git(["init", "--bare", "-q", remote], setup); git(["init", "-q", "-b", "main"], setup);
   git(["config", "user.name", "Release Test"], setup); git(["config", "user.email", "release@example.invalid"], setup);
   git(["add", "."], setup); git(["commit", "-qm", "Initial marketplace"], setup); git(["remote", "add", "origin", remote], setup);
@@ -65,12 +69,14 @@ test("a package tag publishes and verifies only that package at its own version,
   const catalog = JSON.parse(readFileSync(join(setup.market, "marketplace.json")));
   assert.deepEqual(catalog.packages.find(p => p.name === "futu"), setup.originalFutu);
   assert.equal(catalog.packages.find(p => p.name === "longbridge").version, "0.2.1");
-  assert.match(catalog.packages.find(p => p.name === "longbridge").downloads["aarch64-apple-darwin"].url, /longbridge-v0\.2\.1/);
+  const downloads = catalog.packages.find(p => p.name === "longbridge").downloads;
+  assert.deepEqual(Object.keys(downloads), targets);
+  for (const target of targets) assert.equal(downloads[target].url, `https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.1/tick-longbridge-0.2.1-${target}.tar.gz`);
   const readme = readFileSync(join(setup.market, "README.md"), "utf8");
   assert.ok(readme.includes("| [`longbridge`](packages/longbridge) | 0.2.1 | longbridge data |"));
   assert.ok(readme.includes("| [`futu`](packages/futu) | 0.3.0 | Futu |"));
   assert.ok(!readme.includes("Old list")); assert.ok(readme.includes("## Building from source\n\nKept\n"));
-  assert.match(readFileSync(setup.env.RELEASE_TEST_CALLS, "utf8"), /^gh release create longbridge-v0\.2\.1 \S+ --repo tickloopai\/ticks --verify-tag /m);
+  assert.match(readFileSync(setup.env.RELEASE_TEST_CALLS, "utf8"), /^gh release create longbridge-v0\.2\.1 (\S+ ){4}--repo tickloopai\/ticks --verify-tag /m);
   const commit = git(["rev-parse", "HEAD"], setup);
   result = release(setup, "publish", setup.market, setup.archives); assert.equal(result.status, 0, result.stderr);
   assert.equal(git(["rev-parse", "HEAD"], setup), commit);
@@ -87,6 +93,27 @@ test("an existing release with different bytes is rejected without changing the 
   assert.equal(git(["rev-parse", "HEAD"], setup), commit);
 });
 
+test("a version missing any target's archive is not published at all", t => {
+  const setup = fixture(t); const commit = git(["rev-parse", "HEAD"], setup);
+  rmSync(join(setup.archives, setup.archiveNames[2]));
+  const result = release(setup, "publish", setup.market, setup.archives);
+  assert.equal(result.status, 1); assert.match(result.stderr, /no aarch64-unknown-linux-musl archive/);
+  assert.equal(git(["rev-parse", "HEAD"], setup), commit);
+  assert.ok(!readFileSync(setup.env.RELEASE_TEST_CALLS, { encoding: "utf8", flag: "a+" }).includes("gh release"));
+});
+
+test("a release an earlier attempt left part way is completed with the missing archives", t => {
+  const setup = fixture(t);
+  mkdirSync(join(setup.releases, "longbridge-v0.2.1"));
+  copyFileSync(join(setup.archives, setup.archiveName), join(setup.releases, "longbridge-v0.2.1", setup.archiveName));
+  const result = release(setup, "publish", setup.market, setup.archives); assert.equal(result.status, 0, result.stderr);
+  const calls = readFileSync(setup.env.RELEASE_TEST_CALLS, "utf8");
+  assert.ok(!calls.includes("gh release create"));
+  const uploaded = [...calls.matchAll(/^gh release upload longbridge-v0\.2\.1 \S*\/(\S+) /gm)].map(match => match[1]);
+  assert.deepEqual(uploaded, setup.archiveNames.slice(1));
+  assert.equal(release(setup, "verify", setup.archives).status, 0);
+});
+
 test("unknown, malformed and mismatched package tags fail before any publication", t => {
   const setup = fixture(t); const commit = git(["rev-parse", "HEAD"], setup);
   for (const tag of ["tick-longbridge-v0.2.1", "../longbridge-v0.2.1", "missing-v0.2.1", "longbridge-v0.9.0", "longbridge-v01.2.1", "longbridge-0.2.1"]) {
@@ -99,7 +126,11 @@ test("unknown, malformed and mismatched package tags fail before any publication
 test("the workflow queues package releases, keeps their assets separate and publishes with its own token", () => {
   const workflow = readFileSync(join(scripts, "../.github/workflows/release-ticks.yml"), "utf8");
   assert.ok(workflow.includes("- '*-v*'")); assert.ok(workflow.includes("queue: max"));
-  assert.ok(workflow.includes("tick-packages-${{ github.ref_name }}"));
+  assert.ok(workflow.includes("tick-packages-${{ github.ref_name }}-${{ matrix.target }}"));
+  for (const [target, runner] of [["aarch64-apple-darwin", "macos-15"], ["x86_64-apple-darwin", "macos-15"], ["aarch64-unknown-linux-musl", "ubuntu-24.04-arm"], ["x86_64-unknown-linux-musl", "ubuntu-24.04"]])
+    assert.match(workflow, new RegExp(`target: ${target}\\n\\s+runner: ${runner}\\n`), target);
+  assert.ok(workflow.includes("musl-tools")); assert.ok(workflow.includes("merge-multiple: true"));
+  assert.match(workflow, /publish:[\s\S]*?needs: build\n/);
   assert.ok(!workflow.includes("tick-packages-${{ github.sha }}"));
   assert.ok(workflow.includes("contents: write")); assert.ok(workflow.includes("GH_TOKEN: ${{ github.token }}"));
   assert.ok(!workflow.includes("TICKS_RELEASE_TOKEN")); assert.ok(!workflow.includes("repository: "));

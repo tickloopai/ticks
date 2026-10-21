@@ -34,7 +34,7 @@ fn hosted_options(home: &Path, port: u16) -> (Child, File, mpsc::Receiver<Value>
                 &mut slave,
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
-                &mut size,
+                &raw mut size,
             )
         },
         0
@@ -50,7 +50,7 @@ fn hosted_options(home: &Path, port: u16) -> (Child, File, mpsc::Receiver<Value>
         .stderr(Stdio::piped());
     unsafe {
         command.pre_exec(move || {
-            if libc::setsid() < 0 || libc::ioctl(slave, libc::TIOCSCTTY.into(), 0) < 0 {
+            if libc::setsid() < 0 || libc::ioctl(slave, libc::TIOCSCTTY as _, 0) < 0 {
                 return Err(std::io::Error::last_os_error());
             }
             libc::dup2(slave, libc::STDERR_FILENO);

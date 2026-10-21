@@ -12,7 +12,7 @@ tickloop tick uninstall longbridge
 
 Installing downloads the package for your platform, checks its SHA-256 against `marketplace.json`, and places it under `~/.tickloop/ticks/`. No Rust toolchain is needed. Installing a package never opens or subscribes to a Tick and grants no market, account or trading permission; you log in to a package's data source with `/ticks` in the Agent, or with `tickloop tick login <package>` in a terminal.
 
-Prebuilt packages are currently provided for macOS on Apple Silicon (`aarch64-apple-darwin`) only.
+Every package version is prebuilt for macOS on Apple Silicon and Intel (`aarch64-apple-darwin`, `x86_64-apple-darwin`) and for Linux on ARM64 and x86_64 (`aarch64-unknown-linux-musl`, `x86_64-unknown-linux-musl`). The Linux programs are static musl builds, as the Linux Tickloop is, so they run on any distribution.
 
 ## Packages
 
@@ -44,17 +44,17 @@ Tickloop is the authentication client: credentials live in its config root under
 
 ## Building from source
 
-The packages build with current stable Rust (edition 2024) on macOS. They link the domain-agnostic Tick crates from [tickloopai/tickloop](https://github.com/tickloopai/tickloop) (the Tick protocol and SDK, terminal UI, package credentials and OAuth), fetched by Git at the commit pinned in the root `Cargo.toml`; the financial Ticks themselves live in `market/`.
+The packages build with current stable Rust (edition 2024) on macOS and Linux; Linux builds of the released musl targets need `musl-tools` (`musl-gcc`). They link the domain-agnostic Tick crates from [tickloopai/tickloop](https://github.com/tickloopai/tickloop) (the Tick protocol and SDK, terminal UI, package credentials and OAuth), fetched by Git at the commit pinned in the root `Cargo.toml`; the financial Ticks themselves live in `market/`.
 
 ```sh
 make build           # cargo build of both programs
 make check           # cargo fmt --check, clippy -D warnings, then make test
 make test            # release script tests and cargo nextest (cargo install --locked cargo-nextest)
-make package-ticks   # build for Apple Silicon into dist/ticks/ and print each marketplace.json entry
+make package-ticks   # build for this machine into dist/ticks/ and print each marketplace.json entry
 make dev-ticks       # package-ticks, then tickloop tick install --path dist/ticks/<package>
 ```
 
-`make package-ticks` assembles `dist/ticks/<package>/` and the archive `dist/ticks/tick-<package>-<version>-aarch64-apple-darwin.tar.gz` (which unpacks to that directory), with this repository's license and the third-party notices; it publishes nothing. `make dev-ticks` installs with the `tickloop` on your `PATH`, or the one named by `TICKLOOP=<path>`, replacing any installed package of the same name. Select packages with `TICK_PACKAGES="longbridge"`.
+`make package-ticks` assembles `dist/ticks/<target>/<package>/` and the archive `dist/ticks/tick-<package>-<version>-<target>.tar.gz` (which unpacks to that directory) for this machine's target, or for each target in `TICK_TARGETS`, with this repository's license and the third-party notices; it publishes nothing. `make dev-ticks` installs with the `tickloop` on your `PATH`, or the one named by `TICKLOOP=<path>`, replacing any installed package of the same name. Select packages with `TICK_PACKAGES="longbridge"`.
 
 To build against a local Tickloop checkout instead of the pinned commit, clone it beside this repository and copy the override:
 
@@ -80,8 +80,8 @@ Versions come from each package's `Cargo.toml`, kept in step with its `tick-pack
 
 Each tag starts the release workflow, queued one package at a time:
 
-1. Build and check: build the program, check the archive's contents, architecture, ad-hoc signature and reported version, and install it with the latest released Tickloop.
-2. Publish: create the package's Release on its tag, then commit the updated `marketplace.json` and the version table above to the default branch. A Release that already exists with the same archive is kept; a different archive is refused, and `marketplace.json` never moves to an older version.
+1. Build and check, once per target on a runner of that architecture (`macos-15` for both macOS targets, the x86_64 one under Rosetta; `ubuntu-24.04` and `ubuntu-24.04-arm` for Linux): build the program, check the archive's contents, its architecture (and on Linux that it is statically linked), the ad-hoc signature on macOS, that `--help` runs and `--version` reports the version, and install it with the latest released Tickloop for that runner.
+2. Publish, only after all four targets built: create the package's Release on its tag with every target's archive (completing a Release an earlier attempt left part way), then commit the updated `marketplace.json`, which lists all four downloads, and the version table above to the default branch. A Release that already exists with the same archive is kept; a different archive is refused, and `marketplace.json` never moves to an older version.
 3. Verify: download every asset anonymously and compare its SHA-256.
 
 If a stage fails, fix the cause and re-run the failed jobs; do not release again to bump versions. The job log prints the commands that finish or withdraw a partial release.

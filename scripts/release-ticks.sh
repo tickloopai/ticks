@@ -1,10 +1,13 @@
 #!/bin/sh
 # Builds, publishes and verifies the one Tick package selected by RELEASE_TAG=<package>-vX.Y.Z.
 # Version commits and tags are created by scripts/release.mjs; the Release reuses the same tag.
-# The build installs each archive with TICKLOOP (default: tickloop on PATH) as a user would.
+# `build` makes the archive for one target, RELEASE_TARGET (default: this machine's), on a machine
+# that can run it, and installs it with TICKLOOP (default: tickloop on PATH) as a user would.
+# `publish` and `verify` need the archives of every target in $targets: a version is published for
+# all of them or not at all.
 set -eu
 
-target=aarch64-apple-darwin
+targets="aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl"
 repository=tickloopai/ticks
 release_downloads=https://github.com/$repository/releases/download
 test_support_crate=tickloop-tick-test-support
@@ -56,8 +59,20 @@ release_version() {
     manifest_field "packages/$package/tick-package.json" version
 }
 
+# archive_name PACKAGE VERSION TARGET
 archive_name() {
-    echo "tick-$1-$2-$target.tar.gz"
+    echo "tick-$1-$2-$3.tar.gz"
+}
+
+# The `file -b` description a target's program must match, as a grep -E pattern.
+expected_program_type() {
+    case $1 in
+    aarch64-apple-darwin) echo '^Mach-O 64-bit executable arm64$' ;;
+    x86_64-apple-darwin) echo '^Mach-O 64-bit executable x86_64$' ;;
+    aarch64-unknown-linux-musl) echo '^ELF 64-bit LSB (pie )?executable, ARM aarch64, .*(statically|static-pie) linked' ;;
+    x86_64-unknown-linux-musl) echo '^ELF 64-bit LSB (pie )?executable, x86-64, .*(statically|static-pie) linked' ;;
+    *) fail "Unknown release target $1; expected one of: $targets" ;;
+    esac
 }
 
 sha256_of() {
@@ -74,6 +89,12 @@ build_release() {
     tickloop=${TICKLOOP:-tickloop}
     command -v "$tickloop" >/dev/null ||
         fail "No $tickloop to install the archives with; put tickloop on PATH or set TICKLOOP."
+    target=${RELEASE_TARGET:-$(scripts/package-ticks.sh --host-target)}
+    program_type=$(expected_program_type "$target")
+    case $target in
+    x86_64-apple-darwin) run_program="arch -x86_64" ;;
+    *) run_program= ;;
+    esac
     version=$(release_version)
     names=$(packages)
     for package in $names; do
@@ -85,7 +106,7 @@ build_release() {
     done
 
     # shellcheck disable=SC2086 # one word per package name
-    TICK_PACKAGE_QUIET=1 scripts/package-ticks.sh $names
+    TICK_TARGETS=$target TICK_PACKAGE_QUIET=1 scripts/package-ticks.sh $names
 
     scratch=$(mktemp -d "${TMPDIR:-/tmp}/release-ticks.XXXXXX")
     trap 'rm -rf "$scratch"' EXIT
@@ -93,7 +114,7 @@ build_release() {
     mkdir -p "$release_directory"
     for package in $names; do
         executable=$(manifest_field "packages/$package/tick-package.json" executable)
-        name=$(archive_name "$package" "$version")
+        name=$(archive_name "$package" "$version" "$target")
         archive=$dist_directory/$name
 
         unexpected=$(tar -tzf "$archive" |
@@ -108,12 +129,24 @@ build_release() {
         [ -f "$unpacked/THIRD_PARTY_NOTICES.md" ] && [ -d "$unpacked/licenses" ] ||
             fail "$archive has no THIRD_PARTY_NOTICES.md and licenses/"
         program=$unpacked/$executable
-        [ "$(file -b "$program")" = "Mach-O 64-bit executable arm64" ] ||
-            fail "$executable in $archive is not an arm64 executable: $(file -b "$program")"
-        codesign --verify "$program" || fail "$executable in $archive has no valid signature"
-        codesign -dv "$program" 2>&1 | grep -qx 'Signature=adhoc' ||
-            fail "$executable in $archive is not ad-hoc signed"
-        [ "$("$program" --version)" = "$(basename "$executable") $version" ] ||
+        program_description=$(file -b "$program")
+        printf '%s\n' "$program_description" | grep -Eq "$program_type" ||
+            fail "$executable in $archive is not a program for $target: $program_description"
+        case $program_description in
+        *"dynamically linked"*) fail "$executable in $archive is not static: $program_description" ;;
+        esac
+        case $target in
+        *-apple-darwin)
+            codesign --verify "$program" || fail "$executable in $archive has no valid signature"
+            codesign -dv "$program" 2>&1 | grep -qx 'Signature=adhoc' ||
+                fail "$executable in $archive is not ad-hoc signed"
+            ;;
+        esac
+        # shellcheck disable=SC2086 # run_program is empty or a command and its argument
+        $run_program "$program" --help >/dev/null ||
+            fail "$executable in $archive does not run on this machine"
+        # shellcheck disable=SC2086
+        [ "$($run_program "$program" --version)" = "$(basename "$executable") $version" ] ||
             fail "$executable in $archive does not report version $version"
         TICKLOOP_CONFIG_DIR=$scratch/config "$tickloop" tick install --path "$archive" >/dev/null
 
@@ -156,48 +189,66 @@ publish_release() {
     source=${GITHUB_REPOSITORY:-$repository}
     names=$(packages)
     for package in $names; do
-        [ -f "$archives/$(archive_name "$package" "$version")" ] ||
-            fail "$archives has no archive of $package $version"
+        for target in $targets; do
+            [ -f "$archives/$(archive_name "$package" "$version" "$target")" ] ||
+                fail "$archives has no $target archive of $package $version; every target is built before any is published"
+        done
     done
     scratch=$(mktemp -d "${TMPDIR:-/tmp}/release-ticks.XXXXXX")
     published=""
     trap 'status=$?; rm -rf "$scratch"; if [ "$status" -ne 0 ]; then report_published "publish $checkout $archives" "$published"; fi' EXIT
 
     for package in $names; do
-        name=$(archive_name "$package" "$version")
-        archive=$archives/$name
-        sha256=$(sha256_of "$archive")
         release=$package-v$version
-        if view=$(gh release view "$release" --repo "$repository" 2>&1); then
-            gh release download "$release" --repo "$repository" --pattern "$name" \
-                --dir "$scratch/$release" ||
-                fail "Could not download $name from the existing release $release."
-            [ "$(sha256_of "$scratch/$release/$name")" = "$sha256" ] ||
-                fail "The release $release already exists with another $name; raise this package version to release again."
+        files=""
+        sums=""
+        for target in $targets; do
+            name=$(archive_name "$package" "$version" "$target")
+            files="$files $archives/$name"
+            sums="$sums
+- $target: $(sha256_of "$archives/$name")"
+        done
+        if view=$(gh release view "$release" --repo "$repository" --json assets --jq '.assets[].name' 2>&1); then
+            # An earlier attempt may have stopped part way: check what it uploaded, add the rest.
+            for target in $targets; do
+                name=$(archive_name "$package" "$version" "$target")
+                if printf '%s\n' "$view" | grep -qxF "$name"; then
+                    gh release download "$release" --repo "$repository" --pattern "$name" \
+                        --dir "$scratch/$release" ||
+                        fail "Could not download $name from the existing release $release."
+                    [ "$(sha256_of "$scratch/$release/$name")" = "$(sha256_of "$archives/$name")" ] ||
+                        fail "The release $release already exists with another $name; raise this package version to release again."
+                else
+                    gh release upload "$release" "$archives/$name" --repo "$repository" >/dev/null
+                    echo "Added $name to the release $release."
+                fi
+            done
             published="$published $release"
-            echo "The release $release already carries this archive."
+            echo "The release $release carries every archive."
         elif printf '%s\n' "$view" | grep -qi 'not found'; then
-            gh release create "$release" "$archive" --repo "$repository" --verify-tag \
-                --title "$package $version" --notes "Tick package $package $version for $target.
+            # shellcheck disable=SC2086 # one word per archive path
+            gh release create "$release" $files --repo "$repository" --verify-tag \
+                --title "$package $version" --notes "Tick package $package $version for macOS (Apple Silicon and Intel) and Linux (ARM64 and x86_64, static musl).
 
 Install it with \`tickloop tick install $package\`.
 
 Built from $source@$commit ($tag).
-SHA-256: $sha256" >/dev/null
+SHA-256:$sums" >/dev/null
             published="$published $release"
             echo "Created the release $release."
         else
             fail "Could not check the release $release: $(printf '%s\n' "$view" | head -n 1)"
         fi
-        summarize "- $package $version: https://github.com/$repository/releases/tag/$release (SHA-256 $sha256)"
+        summarize "- $package $version: https://github.com/$repository/releases/tag/$release"
     done
 
     # shellcheck disable=SC2086 # one word per package name
-    python3 -I - "$marketplace" "$readme" "$archives" "$target" "$release_downloads" "$version" \
+    python3 -I - "$marketplace" "$readme" "$archives" "$targets" "$release_downloads" "$version" \
         $names <<'EOF'
 import hashlib, json, sys
 
-marketplace_path, readme_path, archives, target, release_downloads, version, *names = sys.argv[1:]
+marketplace_path, readme_path, archives, targets, release_downloads, version, *names = sys.argv[1:]
+targets = targets.split()
 
 with open(marketplace_path) as marketplace_file:
     marketplace = json.load(marketplace_file)
@@ -205,26 +256,27 @@ packages = {package["name"]: package for package in marketplace["packages"]}
 for name in names:
     with open(f"packages/{name}/tick-package.json") as manifest_file:
         description = json.load(manifest_file)["description"]
-    archive_name = f"tick-{name}-{version}-{target}.tar.gz"
-    with open(f"{archives}/{archive_name}", "rb") as archive_file:
-        sha256 = hashlib.sha256(archive_file.read()).hexdigest()
+    downloads = {}
+    for target in targets:
+        archive_name = f"tick-{name}-{version}-{target}.tar.gz"
+        with open(f"{archives}/{archive_name}", "rb") as archive_file:
+            sha256 = hashlib.sha256(archive_file.read()).hexdigest()
+        downloads[target] = {
+            "url": f"{release_downloads}/{name}-v{version}/{archive_name}",
+            "sha256": sha256,
+        }
     listed = packages.get(name)
     if listed and tuple(map(int, listed["version"].split("."))) > tuple(map(int, version.split("."))):
         sys.exit(f"marketplace.json already lists newer {name} {listed['version']}; refusing to downgrade to {version}")
     if listed and listed["version"] == version:
-        listed_sha256 = listed["downloads"].get(target, {}).get("sha256")
-        if listed_sha256 != sha256:
-            sys.exit(f"marketplace.json lists {name} {version} with another archive ({listed_sha256})")
+        for target, download in listed["downloads"].items():
+            if downloads.get(target, {}).get("sha256") != download.get("sha256"):
+                sys.exit(f"marketplace.json lists {name} {version} with another {target} archive ({download.get('sha256')})")
     packages[name] = {
         "name": name,
         "version": version,
         "description": description,
-        "downloads": {
-            target: {
-                "url": f"{release_downloads}/{name}-v{version}/{archive_name}",
-                "sha256": sha256,
-            }
-        },
+        "downloads": downloads,
     }
 marketplace["packages"] = sorted(packages.values(), key=lambda package: package["name"])
 with open(marketplace_path, "w") as marketplace_file:
@@ -282,19 +334,21 @@ verify_release() {
     scratch=$(mktemp -d "${TMPDIR:-/tmp}/release-ticks.XXXXXX")
     trap 'status=$?; rm -rf "$scratch"; if [ "$status" -ne 0 ]; then report_published "verify $archives" "$published"; fi' EXIT
     for package in $(packages); do
-        name=$(archive_name "$package" "$version")
-        expected=$(sha256_of "$archives/$name")
-        url=$release_downloads/$package-v$version/$name
-        attempt=1
-        # Without credentials, as anyone installing the package downloads it.
-        until curl -fsSL -o "$scratch/$name" "$url"; do
-            [ "$attempt" -lt "$download_attempts" ] || fail "Could not download $url."
-            attempt=$((attempt + 1))
-            sleep "$download_retry_seconds"
+        for target in $targets; do
+            name=$(archive_name "$package" "$version" "$target")
+            expected=$(sha256_of "$archives/$name")
+            url=$release_downloads/$package-v$version/$name
+            attempt=1
+            # Without credentials, as anyone installing the package downloads it.
+            until curl -fsSL -o "$scratch/$name" "$url"; do
+                [ "$attempt" -lt "$download_attempts" ] || fail "Could not download $url."
+                attempt=$((attempt + 1))
+                sleep "$download_retry_seconds"
+            done
+            downloaded=$(sha256_of "$scratch/$name")
+            [ "$downloaded" = "$expected" ] || fail "$url has SHA-256 $downloaded, not $expected."
+            echo "Verified $url."
         done
-        downloaded=$(sha256_of "$scratch/$name")
-        [ "$downloaded" = "$expected" ] || fail "$url has SHA-256 $downloaded, not $expected."
-        echo "Verified $url."
     done
     summarize "- Every download matches its SHA-256."
 }

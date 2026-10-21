@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-The official Tick marketplace for Tickloop and the source of its Tick packages. Each package under `packages/<name>/` is a Rust crate that builds one program `tick-<name>`, shipped together with `tick-package.json` and a `skills/` directory. The financial Ticks those programs run live in `market/`; Tickloop itself stays domain-agnostic. Tickloop runs the program as a Tick (a protocol-speaking terminal view); the Agent learns how to open it from the package's Skill. Only macOS on Apple Silicon is built and shipped.
+The official Tick marketplace for Tickloop and the source of its Tick packages. Each package under `packages/<name>/` is a Rust crate that builds one program `tick-<name>`, shipped together with `tick-package.json` and a `skills/` directory. The financial Ticks those programs run live in `market/`; Tickloop itself stays domain-agnostic. Tickloop runs the program as a Tick (a protocol-speaking terminal view); the Agent learns how to open it from the package's Skill. Every package version ships for `aarch64-apple-darwin`, `x86_64-apple-darwin`, `aarch64-unknown-linux-musl` and `x86_64-unknown-linux-musl` (Linux builds are static musl and need `musl-tools`).
 
 ## Commands
 
@@ -12,8 +12,8 @@ The official Tick marketplace for Tickloop and the source of its Tick packages. 
 make build           # cargo build --locked --workspace --bins
 make test            # node --test scripts/*.test.mjs, then cargo nextest (requires cargo-nextest)
 make check           # cargo fmt --check, clippy --all-targets -D warnings, then make test (run before a PR)
-make package-ticks   # build into dist/ticks/<package>/ and the release tarball; prints marketplace.json entries
-make dev-ticks       # package-ticks, then `tickloop tick install --path dist/ticks/<package>`
+make package-ticks   # build into dist/ticks/<target>/<package>/ and the release tarball for this machine (or TICK_TARGETS); prints marketplace.json entries
+make dev-ticks       # package-ticks, then `tickloop tick install --path dist/ticks/<host target>/<package>`
 ```
 
 Select packages with `TICK_PACKAGES="longbridge"`; point `dev-ticks` at a specific binary with `TICKLOOP=<path>`.
@@ -49,4 +49,4 @@ Live Longbridge tests are gated behind the `live-api` feature and `#[ignore]` (i
 
 ## Releasing
 
-`make release` (or `node scripts/release.mjs`, `--check` to preview) bumps each selected package's patch version (or `VERSION=x.y.z`), commits `chore(release): …`, and pushes one `<package>-v<version>` tag per package from a temporary checkout. Each tag triggers `.github/workflows/release-ticks.yml`: build and verify the archive, publish the GitHub Release and update `marketplace.json` on the default branch, then verify downloads by SHA-256. If a stage fails, re-run the failed jobs rather than releasing again.
+`make release` (or `node scripts/release.mjs`, `--check` to preview) bumps each selected package's patch version (or `VERSION=x.y.z`), commits `chore(release): …`, and pushes one `<package>-v<version>` tag per package from a temporary checkout. Each tag triggers `.github/workflows/release-ticks.yml`: build and verify one archive per target on a runner of that architecture (`scripts/release-ticks.sh build` with `RELEASE_TARGET`), and only when all four pass, publish the GitHub Release with every archive and update `marketplace.json` on the default branch, then verify downloads by SHA-256. A target is added in `targets` of `scripts/release-ticks.sh`, the build matrix of that workflow and `host_target` of `scripts/package-ticks.sh`. If a stage fails, re-run the failed jobs rather than releasing again.

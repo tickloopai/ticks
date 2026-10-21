@@ -20,16 +20,16 @@ env:
   RELEASE_TAG: ${{ github.ref_name }}
   RELEASE_COMMIT: ${{ github.sha }}
 
-# Each stage is its own job so a failed stage can be re-run alone ("Re-run failed jobs")
+# Each stage is its own job, and each target its own build, so a failed one can be re-run alone ("Re-run failed jobs")
 # without repeating the stages that already passed. A repeated publish keeps the releases an
 # earlier attempt created, as long as they carry the same archives. Releases reuse the pushed
 # <package>-vX.Y.Z tag; the marketplace update is a commit to the default branch.
 # The build fetches the Tickloop crates from tickloopai/tickloop, which must be public.
 jobs:
-  build:
-    name: Build and verify
-    runs-on: macos-15
-    timeout-minutes: 90
+  check:
+    name: Check the tag and release scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Check out the tagged source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -57,9 +57,51 @@ jobs:
             exit 1
           fi
 
+  # One archive per target, each built and run on a machine of its own architecture: Linux on
+  # native runners (static musl, as the Linux Tickloop is), Intel macOS under Rosetta. Publishing
+  # waits for all four, so a version never ships for only some targets.
+  build:
+    name: Build and verify ${{ matrix.target }}
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+            tickloop: aarch64-apple-darwin
+          - target: x86_64-apple-darwin
+            runner: macos-15
+            tickloop: aarch64-apple-darwin
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+            tickloop: aarch64-unknown-linux-musl
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            tickloop: x86_64-unknown-linux-musl
+    env:
+      RELEASE_TARGET: ${{ matrix.target }}
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install musl-tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Install Rosetta
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: arch -x86_64 /usr/bin/true 2>/dev/null || softwareupdate --install-rosetta --agree-to-license
+
       - name: Set up Rust
         run: |
-          rustup toolchain install stable --profile minimal --target aarch64-apple-darwin
+          rustup toolchain install stable --profile minimal --target "$RELEASE_TARGET"
           rustup default stable
 
       - name: Restore the Cargo cache
@@ -70,14 +112,16 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ticks-release-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ticks-release-${{ runner.os }}-${{ runner.arch }}-
+          key: ticks-release-${{ matrix.target }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ticks-release-${{ matrix.target }}-${{ runner.os }}-${{ runner.arch }}-
 
       # The build installs each archive with the latest released Tickloop, as users install it.
       - name: Download the released Tickloop
+        env:
+          TICKLOOP_TARGET: ${{ matrix.tickloop }}
         run: |
           directory=$RUNNER_TEMP/tickloop
-          archive=tickloop-aarch64-apple-darwin.tar.gz
+          archive=tickloop-$TICKLOOP_TARGET.tar.gz
           mkdir -p "$directory"
           cd "$directory"
           for name in "$archive" "$archive.sha256"; do
@@ -94,7 +138,7 @@ jobs:
       - name: Keep the archives for publishing and verification
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: tick-packages-${{ github.ref_name }}
+          name: tick-packages-${{ github.ref_name }}-${{ matrix.target }}
           path: dist/release
           if-no-files-found: error
           retention-days: 30
@@ -124,7 +168,8 @@ jobs:
       - name: Restore the archives
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: tick-packages-${{ github.ref_name }}
+          pattern: tick-packages-${{ github.ref_name }}-*
+          merge-multiple: true
           path: dist/release
 
       - name: Create the releases and update the marketplace
@@ -148,7 +193,8 @@ jobs:
       - name: Restore the archives
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: tick-packages-${{ github.ref_name }}
+          pattern: tick-packages-${{ github.ref_name }}-*
+          merge-multiple: true
           path: dist/release
 
       - name: Download every release asset anonymously
