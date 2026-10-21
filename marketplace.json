@@ -7,12 +7,24 @@
   "packages": [
     {
       "name": "futu",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "description": "Futu OpenD option chains, option pricing and implied volatility",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.4/tick-futu-0.2.4-aarch64-apple-darwin.tar.gz",
-          "sha256": "dda633f6d3f9776b3acb74f4dc37513251daee546112e2d8192dfe68bed5b9f1"
+          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.5/tick-futu-0.2.5-aarch64-apple-darwin.tar.gz",
+          "sha256": "930c276ee8273100414f6a84d4676d6950455070789da585834d0148fec2992f"
+        },
+        "x86_64-apple-darwin": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.5/tick-futu-0.2.5-x86_64-apple-darwin.tar.gz",
+          "sha256": "6be0fe5944e02df7ada4899e4076999802298cd8821b4e6cbf01e50ff245c6da"
+        },
+        "aarch64-unknown-linux-musl": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.5/tick-futu-0.2.5-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "e74da30d1eac6ec1527584f83dd1f8e415b9c9d806f38a0ca6625f77f4da8e5d"
+        },
+        "x86_64-unknown-linux-musl": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.5/tick-futu-0.2.5-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "7c688ddb6addeb7abd15a83dce34d46cc496d3a06751e8cc5670fc0473c089a4"
         }
       }
     },
