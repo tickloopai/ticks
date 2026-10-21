@@ -30,12 +30,24 @@
     },
     {
       "name": "longbridge",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "description": "Longbridge quotes, watchlist, kline, positions, news, earnings and community posts",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.4/tick-longbridge-0.2.4-aarch64-apple-darwin.tar.gz",
-          "sha256": "32389385a93fa663f292879c38bb4a203e30365589b73d7e4b3f8aa262fffba8"
+          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.5/tick-longbridge-0.2.5-aarch64-apple-darwin.tar.gz",
+          "sha256": "a49b51545383abafa08c1268b9286301fe91a4ec66d1cfaf5dc10f8eb245551a"
+        },
+        "x86_64-apple-darwin": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.5/tick-longbridge-0.2.5-x86_64-apple-darwin.tar.gz",
+          "sha256": "e03b1e0b0ef9d6e36d4bb0f7af882e30fd5e23b2fca299472d6119206a527588"
+        },
+        "aarch64-unknown-linux-musl": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.5/tick-longbridge-0.2.5-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "c6deedd22763a2bd3806a9b9307ec229eb1955214210e188933d025b3e7c00a7"
+        },
+        "x86_64-unknown-linux-musl": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.5/tick-longbridge-0.2.5-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "e33c6e2322ea3c7b474b3002447d1724d41d581ae30f6b32c34d37c6355d561f"
         }
       }
     },
