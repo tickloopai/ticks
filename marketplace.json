@@ -26,6 +26,29 @@
           "sha256": "32389385a93fa663f292879c38bb4a203e30365589b73d7e4b3f8aa262fffba8"
         }
       }
+    },
+    {
+      "name": "tickloop",
+      "version": "0.1.1",
+      "description": "Official Tickloop Ticks: the Reader for original financial documents from URLs or local files",
+      "downloads": {
+        "aarch64-apple-darwin": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.1/tick-tickloop-0.1.1-aarch64-apple-darwin.tar.gz",
+          "sha256": "6a9e10fa5dd0cba881704c1d4a6df5f41bbdaabfc652deec8f038b117bd3889a"
+        },
+        "x86_64-apple-darwin": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.1/tick-tickloop-0.1.1-x86_64-apple-darwin.tar.gz",
+          "sha256": "bfaebc59ccad24fc1500b7052da8262bb551f54b56e8caf0d1ca3fbc534a6f35"
+        },
+        "aarch64-unknown-linux-musl": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.1/tick-tickloop-0.1.1-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "15f200cf95407d49248b39b3c9a0f03c9171790a885177d891c84a8d03e8daf5"
+        },
+        "x86_64-unknown-linux-musl": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.1/tick-tickloop-0.1.1-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "a88958066c908dbdb2322cb229274e037f4f66434b56410e5d95d1d92b85af7c"
+        }
+      }
     }
   ]
 }
