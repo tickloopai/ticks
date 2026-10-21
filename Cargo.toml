@@ -14,12 +14,12 @@ repository = "https://github.com/tickloopai/ticks"
 # these crates, pin that tag instead. To build against a local checkout, see
 # .cargo/config.toml.example.
 [workspace.dependencies]
-tickloop-tick-oauth = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
-tickloop-tick-oauth-test-server = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
-tickloop-tick-packages = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
-tickloop-tick-protocol = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
-tickloop-tick-sdk = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
-tickloop-ui = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
+tickloop-tick-oauth = { git = "https://github.com/tickloopai/tickloop", rev = "387221cc05a5c815965e4f62fb4bf05e7dcd7e56" }
+tickloop-tick-oauth-test-server = { git = "https://github.com/tickloopai/tickloop", rev = "387221cc05a5c815965e4f62fb4bf05e7dcd7e56" }
+tickloop-tick-packages = { git = "https://github.com/tickloopai/tickloop", rev = "387221cc05a5c815965e4f62fb4bf05e7dcd7e56" }
+tickloop-tick-protocol = { git = "https://github.com/tickloopai/tickloop", rev = "387221cc05a5c815965e4f62fb4bf05e7dcd7e56" }
+tickloop-tick-sdk = { git = "https://github.com/tickloopai/tickloop", rev = "387221cc05a5c815965e4f62fb4bf05e7dcd7e56" }
+tickloop-ui = { git = "https://github.com/tickloopai/tickloop", rev = "387221cc05a5c815965e4f62fb4bf05e7dcd7e56" }
 
 # The financial Ticks and the provider interfaces they read, in market/.
 tickloop-tick-command = { path = "market/command" }
@@ -32,7 +32,7 @@ debug = "line-tables-only"
 
 [patch.crates-io]
 # Tickloop's crossterm 0.29 with its Escape parsing fix, vendored at vendor/crossterm there.
-crossterm = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
+crossterm = { git = "https://github.com/tickloopai/tickloop", rev = "387221cc05a5c815965e4f62fb4bf05e7dcd7e56" }
 # Reads no `.env` file for the Longbridge SDK; see vendor/dotenv/README.md.
 dotenv = { path = "vendor/dotenv" }
 
