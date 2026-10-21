@@ -364,17 +364,17 @@ function stage(setup, name, body = "") {
   return path;
 }
 
-test("a local release checks and builds every tag in the versioned snapshot before committing, then publishes", t => {
+test("a local release builds every tag in the versioned snapshot before committing, then publishes, without running the tests", t => {
   const setup = fixture(t);
   const stages = stage(setup, "release-local.sh", '[ "$1" != publish ] || [ "$RELEASE_BRANCH" = main ] || exit 9\n');
   const result = command(process.execPath, [releaseScript, "--local"], setup, { TICK_RELEASE_LOCAL: stages });
   assert.equal(result.status, 0, result.stderr);
   const calls = readFileSync(setup.env.RELEASE_TEST_LOG, "utf8").trim().split("\n").filter(line => !line.startsWith("cargo "));
-  assert.deepEqual(calls.map(line => line.split("|")[0]), ["check", "build", "publish"]);
+  assert.deepEqual(calls.map(line => line.split("|")[0]), ["build", "publish"]);
   const repo = realpathSync(setup.repo), snapshot = calls[0].split("|")[1];
   assert.ok(snapshot.startsWith(join(repo, "target")), snapshot);
-  assert.ok(calls[1].endsWith(`build ${snapshot} ${join(repo, "dist/release-local")} ${allTags.join(" ")}`), calls[1]);
-  assert.equal(calls[2], `publish|${repo}|publish ${join(repo, "dist/release-local")} ${allTags.join(" ")}`);
+  assert.ok(calls[0].endsWith(`build ${snapshot} ${join(repo, "dist/release-local")} ${allTags.join(" ")}`), calls[0]);
+  assert.equal(calls[1], `publish|${repo}|publish ${join(repo, "dist/release-local")} ${allTags.join(" ")}`);
   for (const tag of allTags) assert.equal(git(["ls-remote", "origin", `refs/tags/${tag}^{}`], setup).split("\t")[0], git(["rev-parse", "HEAD"], setup));
   assert.match(result.stdout, /Published .* and updated marketplace\.json/);
 });

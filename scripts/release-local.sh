@@ -1,8 +1,10 @@
 #!/bin/sh
 # Runs the package release stages that the GitHub release workflow runs, on this Mac and two
-# OrbStack Linux machines instead, for `make release` (scripts/release.mjs --local):
+# OrbStack Linux machines instead, for `make release` (scripts/release.mjs --local), which runs
+# build and publish but not the tests:
 #
-#   check SOURCE                     make check on this Mac and on both Linux machines
+#   check SOURCE                     make check on this Mac and on both Linux machines, to run by
+#                                    hand before releasing
 #   build SOURCE ARCHIVES TAG...     scripts/release-ticks.sh build for every target of every tag,
 #                                    each on a machine of its architecture, into ARCHIVES
 #   publish ARCHIVES TAG...          scripts/release-ticks.sh publish and verify for every tag, from

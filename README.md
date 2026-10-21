@@ -69,6 +69,7 @@ cp .cargo/config.toml.example .cargo/config.toml
 ## Releasing
 
 ```sh
+scripts/release-local.sh check .               # the tests on this Mac and both Linux machines; run before releasing
 make release                                   # every package, each from its own version, patch + 1; built here
 make release TICK_PACKAGES=longbridge          # only longbridge
 VERSION=0.3.0 make release TICK_PACKAGES=futu  # an explicit, higher version
@@ -76,7 +77,7 @@ make release REMOTE=1                          # the same, but GitHub Actions ch
 node scripts/release.mjs --check               # preview; changes nothing
 ```
 
-`make release` releases from this Mac, without GitHub Actions (`scripts/release-local.sh`). In a snapshot of the bumped versions it runs `make check` here and in two OrbStack Linux machines, `tl-arm` and `tl-x86` (`TICKS_LINUX_ARM64_MACHINE`, `TICKS_LINUX_X86_64_MACHINE`; a missing toolchain is installed in them), then builds and checks every package for all four targets, the macOS ones here and each Linux one in the machine of its architecture. Only when everything passed does it commit the versions and push the tags; it then publishes each Release with its four archives, updates `marketplace.json` from a temporary checkout of the default branch, verifies the downloads and fast-forwards your branch to the marketplace update. It needs OrbStack, Rosetta, the `aarch64-apple-darwin` and `x86_64-apple-darwin` Rust targets, and `gh` logged in with write access. If publishing fails after the push, fix the cause and run `scripts/release-local.sh publish dist/release-local <tags>`, which keeps what was published.
+`make release` releases from this Mac, without GitHub Actions (`scripts/release-local.sh`). It runs no tests: run them first, here and in two OrbStack Linux machines `tl-arm` and `tl-x86` (`TICKS_LINUX_ARM64_MACHINE`, `TICKS_LINUX_X86_64_MACHINE`; a missing toolchain is installed in them), with `scripts/release-local.sh check .`. In a snapshot of the bumped versions it builds and checks every package for all four targets, the macOS ones here and each Linux one in the machine of its architecture. Only when every build passed does it commit the versions and push the tags; it then publishes each Release with its four archives, updates `marketplace.json` from a temporary checkout of the default branch, verifies the downloads and fast-forwards your branch to the marketplace update. It needs OrbStack, Rosetta, the `aarch64-apple-darwin` and `x86_64-apple-darwin` Rust targets, and `gh` logged in with write access. If publishing fails after the push, fix the cause and run `scripts/release-local.sh publish dist/release-local <tags>`, which keeps what was published.
 
 `make release REMOTE=1` pushes the version commit and tags the same way, without local checks or builds, and starts the release workflow below on each tag. To release entirely from GitHub instead, run the **Release** workflow from the Actions tab on the default branch, with the packages (empty for every package) and an optional version. It runs `make release` there and then starts the release workflow below on each tag it pushed, since tags pushed with a workflow's `GITHUB_TOKEN` start no workflow by themselves.
 

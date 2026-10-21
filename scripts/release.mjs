@@ -188,9 +188,9 @@ function prepareAndCheck(state, mode, publishing) {
     if (checked.status !== 0) throw new Error("cargo check failed; no version commit or release tag was created.");
     if (publishing === "local") {
       // Every archive is built from this snapshot, which the version commit reproduces exactly,
-      // before anything is committed, tagged or pushed.
+      // before anything is committed, tagged or pushed. The tests are the maintainer's to run
+      // beforehand (scripts/release-local.sh check).
       rmSync(localArchives(state), { recursive: true, force: true });
-      runLocalStage(snapshot, ["check", snapshot], env, "Local checks failed; no version commit or release tag was created.");
       runLocalStage(snapshot, ["build", snapshot, localArchives(state), ...products.map(product => product.tag)], env, "A local build failed; no version commit or release tag was created.");
     }
     const changed = gitOutput(["diff", "--name-only", "HEAD"], "Could not inspect the checked release files.", { cwd: snapshot }).split("\n");
