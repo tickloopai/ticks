@@ -3762,7 +3762,7 @@ dependencies = [
 
 [[package]]
 name = "tickloop-tick-futu"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "async-trait",
  "clap",
@@ -3780,7 +3780,7 @@ dependencies = [
 
 [[package]]
 name = "tickloop-tick-longbridge"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "async-trait",
  "clap",
@@ -3941,7 +3941,7 @@ dependencies = [
 
 [[package]]
 name = "tickloop-tick-tickloop"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "libc",
