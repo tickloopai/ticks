@@ -12,6 +12,7 @@ repository=tickloopai/ticks
 release_downloads=https://github.com/$repository/releases/download
 test_support_crate=tickloop-tick-test-support
 download_attempts=6
+upload_attempts=4
 download_retry_seconds=5
 repository_root=$(CDPATH='' cd "$(dirname "$0")/.." && pwd -P)
 dist_directory=$repository_root/dist/ticks
@@ -209,45 +210,48 @@ publish_release() {
 
     for package in $names; do
         release=$package-v$version
-        files=""
         sums=""
         for target in $targets; do
-            name=$(archive_name "$package" "$version" "$target")
-            files="$files $archives/$name"
             sums="$sums
-- $target: $(sha256_of "$archives/$name")"
+- $target: $(sha256_of "$archives/$(archive_name "$package" "$version" "$target")")"
         done
-        if view=$(gh release view "$release" --repo "$repository" --json assets --jq '.assets[].name' 2>&1); then
-            # An earlier attempt may have stopped part way: check what it uploaded, add the rest.
-            for target in $targets; do
-                name=$(archive_name "$package" "$version" "$target")
-                if printf '%s\n' "$view" | grep -qxF "$name"; then
-                    gh release download "$release" --repo "$repository" --pattern "$name" \
-                        --dir "$scratch/$release" ||
-                        fail "Could not download $name from the existing release $release."
-                    [ "$(sha256_of "$scratch/$release/$name")" = "$(sha256_of "$archives/$name")" ] ||
-                        fail "The release $release already exists with another $name; raise this package version to release again."
-                else
-                    gh release upload "$release" "$archives/$name" --repo "$repository" >/dev/null
-                    echo "Added $name to the release $release."
-                fi
-            done
-            published="$published $release"
-            echo "The release $release carries every archive."
-        elif printf '%s\n' "$view" | grep -qi 'not found'; then
-            # shellcheck disable=SC2086 # one word per archive path
-            gh release create "$release" $files --repo "$repository" --verify-tag \
+        if ! view=$(gh release view "$release" --repo "$repository" --json assets \
+            --jq '.assets[] | select(.state == "uploaded") | .name' 2>&1); then
+            printf '%s\n' "$view" | grep -qi 'not found' ||
+                fail "Could not check the release $release: $(printf '%s\n' "$view" | head -n 1)"
+            # The archives follow one at a time, so a stalled upload is retried alone instead of
+            # discarding the whole release.
+            gh release create "$release" --repo "$repository" --verify-tag \
                 --title "$package $version" --notes "Tick package $package $version for macOS (Apple Silicon and Intel) and Linux (ARM64 and x86_64, static musl).
 
 Install it with \`tickloop tick install $package\`.
 
 Built from $source@$commit ($tag).
 SHA-256:$sums" >/dev/null
-            published="$published $release"
             echo "Created the release $release."
-        else
-            fail "Could not check the release $release: $(printf '%s\n' "$view" | head -n 1)"
+            view=""
         fi
+        published="$published $release"
+        for target in $targets; do
+            name=$(archive_name "$package" "$version" "$target")
+            if printf '%s\n' "$view" | grep -qxF "$name"; then
+                gh release download "$release" --repo "$repository" --pattern "$name" \
+                    --dir "$scratch/$release" ||
+                    fail "Could not download $name from the existing release $release."
+                [ "$(sha256_of "$scratch/$release/$name")" = "$(sha256_of "$archives/$name")" ] ||
+                    fail "The release $release already exists with another $name; raise this package version to release again."
+                continue
+            fi
+            attempt=1
+            # --clobber replaces what a stalled attempt left of the same asset.
+            until gh release upload "$release" "$archives/$name" --repo "$repository" --clobber >/dev/null; do
+                [ "$attempt" -lt "$upload_attempts" ] || fail "Could not upload $name to the release $release."
+                attempt=$((attempt + 1))
+                echo "Uploading $name failed; retrying ($attempt of $upload_attempts)." >&2
+                sleep "$download_retry_seconds"
+            done
+            echo "Uploaded $name to the release $release."
+        done
         summarize "- $package $version: https://github.com/$repository/releases/tag/$release"
     done
 

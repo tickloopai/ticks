@@ -47,7 +47,7 @@ if (path.basename(process.argv[1]) === 'curl') {
   const files = args.slice(3, args.findIndex((arg, index) => index >= 3 && arg.startsWith('--')));
   if (action === 'view') { if (!fs.existsSync(target)) { console.error('release not found'); process.exit(1); } if (args.includes('--json')) console.log(fs.readdirSync(target).join('\\n')); }
   else if (action === 'create') { fs.mkdirSync(target); for (const file of files) fs.copyFileSync(file, path.join(target,path.basename(file))); }
-  else if (action === 'upload') { for (const file of files) fs.copyFileSync(file, path.join(target,path.basename(file))); }
+  else if (action === 'upload') { const failures = path.join(store, 'upload-failures'); const left = fs.existsSync(failures) ? Number(fs.readFileSync(failures, 'utf8')) : 0; if (left > 0) { fs.writeFileSync(failures, String(left - 1)); console.error('HTTP 408: Upload body timed out due to inactivity'); process.exit(1); } for (const file of files) fs.copyFileSync(file, path.join(target,path.basename(file))); }
   else if (action === 'download') { const directory = args[args.indexOf('--dir')+1]; fs.mkdirSync(directory,{recursive:true}); fs.copyFileSync(path.join(target,args[args.indexOf('--pattern')+1]),path.join(directory,args[args.indexOf('--pattern')+1])); }
   else process.exit(2);
 }
@@ -76,7 +76,9 @@ test("a package tag publishes and verifies only that package at its own version,
   assert.ok(readme.includes("| [`longbridge`](packages/longbridge) | 0.2.1 | longbridge data |"));
   assert.ok(readme.includes("| [`futu`](packages/futu) | 0.3.0 | Futu |"));
   assert.ok(!readme.includes("Old list")); assert.ok(readme.includes("## Building from source\n\nKept\n"));
-  assert.match(readFileSync(setup.env.RELEASE_TEST_CALLS, "utf8"), /^gh release create longbridge-v0\.2\.1 (\S+ ){4}--repo tickloopai\/ticks --verify-tag /m);
+  const calls = readFileSync(setup.env.RELEASE_TEST_CALLS, "utf8");
+  assert.match(calls, /^gh release create longbridge-v0\.2\.1 --repo tickloopai\/ticks --verify-tag /m);
+  assert.deepEqual([...calls.matchAll(/^gh release upload longbridge-v0\.2\.1 \S*\/(\S+) --repo tickloopai\/ticks --clobber$/gm)].map(match => match[1]), setup.archiveNames);
   const commit = git(["rev-parse", "HEAD"], setup);
   result = release(setup, "publish", setup.market, setup.archives); assert.equal(result.status, 0, result.stderr);
   assert.equal(git(["rev-parse", "HEAD"], setup), commit);
@@ -112,6 +114,15 @@ test("a release an earlier attempt left part way is completed with the missing a
   const uploaded = [...calls.matchAll(/^gh release upload longbridge-v0\.2\.1 \S*\/(\S+) /gm)].map(match => match[1]);
   assert.deepEqual(uploaded, setup.archiveNames.slice(1));
   assert.equal(release(setup, "verify", setup.archives).status, 0);
+});
+
+test("a stalled upload is retried alone and the release still lists every archive", t => {
+  const setup = fixture(t);
+  writeFileSync(join(setup.releases, "upload-failures"), "2");
+  const result = release(setup, "publish", setup.market, setup.archives); assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /retrying \(3 of 4\)/);
+  assert.equal(release(setup, "verify", setup.archives).status, 0);
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(setup.market, "marketplace.json"))).packages.find(p => p.name === "longbridge").downloads), targets);
 });
 
 test("unknown, malformed and mismatched package tags fail before any publication", t => {
