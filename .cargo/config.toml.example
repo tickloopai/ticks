@@ -1,4 +1,4 @@
-# Build against a sibling Tickloop checkout instead of the commit pinned in Cargo.toml, for
+# Build against a sibling Tickloop checkout instead of the commit locked in Cargo.lock, for
 # changes that span both repositories:
 #
 #   git clone https://github.com/tickloopai/tickloop ../tickloop
@@ -7,8 +7,8 @@
 # To build against a Tickloop worktree instead, replace ../tickloop below with its path.
 #
 # .cargo/config.toml is ignored by Git. Cargo.lock entries resolved through these paths are
-# not valid for CI: delete .cargo/config.toml and run `cargo update` against the pinned
-# commit before committing Cargo.lock. Release builds run in a fresh checkout and never read it.
+# not valid for CI: delete .cargo/config.toml and run `cargo update -p tickloop-tick-sdk`
+# before committing Cargo.lock. Release builds run in a fresh checkout and never read it.
 
 [patch."https://github.com/tickloopai/tickloop"]
 tickloop-tick-oauth = { path = "../tickloop/tick/oauth" }
