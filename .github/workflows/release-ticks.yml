@@ -57,12 +57,18 @@ jobs:
             exit 1
           fi
 
+  # The whole CI suite on macOS and Linux; CI runs only here or by hand.
+  ci:
+    name: CI
+    needs: check
+    uses: ./.github/workflows/ci.yml
+
   # One archive per target, each built and run on a machine of its own architecture: Linux on
   # native runners (static musl, as the Linux Tickloop is), Intel macOS under Rosetta. Publishing
   # waits for all four, so a version never ships for only some targets.
   build:
     name: Build and verify ${{ matrix.target }}
-    needs: check
+    needs: [check, ci]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
