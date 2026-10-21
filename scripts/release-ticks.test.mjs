@@ -125,7 +125,7 @@ test("unknown, malformed and mismatched package tags fail before any publication
 
 test("the workflow queues package releases, keeps their assets separate and publishes with its own token", () => {
   const workflow = readFileSync(join(scripts, "../.github/workflows/release-ticks.yml"), "utf8");
-  assert.ok(workflow.includes("- '*-v*'")); assert.ok(workflow.includes("queue: max"));
+  assert.match(workflow, /^on:\n  workflow_dispatch:\n\n/m); assert.ok(!workflow.includes("tags:")); assert.ok(workflow.includes("queue: max"));
   assert.ok(workflow.includes("tick-packages-${{ github.ref_name }}-${{ matrix.target }}"));
   for (const [target, runner] of [["aarch64-apple-darwin", "macos-15"], ["x86_64-apple-darwin", "macos-15"], ["aarch64-unknown-linux-musl", "ubuntu-24.04-arm"], ["x86_64-unknown-linux-musl", "ubuntu-24.04"]])
     assert.match(workflow, new RegExp(`target: ${target}\\n\\s+runner: ${runner}\\n`), target);

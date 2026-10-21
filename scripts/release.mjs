@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -149,8 +149,26 @@ function assertBranchIncludesOrigin(branch) {
   if (remoteCommit && git(["merge-base", "--is-ancestor", remoteCommit, "HEAD"]).status !== 0) throw new Error(`${branch.slice("refs/heads/".length)} on origin has commits this branch lacks, such as marketplace updates from the release workflow; pull them before releasing.`);
 }
 
-function prepareAndCheck(state, mode) {
-  const parent = mkdtempSync(join(tmpdir(), "tickloop-release-"));
+// The local release stages (scripts/release-local.sh); TICK_RELEASE_LOCAL replaces it in tests.
+function localStages(root) {
+  return process.env.TICK_RELEASE_LOCAL || join(root, "scripts/release-local.sh");
+}
+
+function localArchives(state) {
+  return join(state.root, "dist/release-local");
+}
+
+function runLocalStage(root, args, env, failureMessage) {
+  const result = command(localStages(root), args, { cwd: root, env, stdio: "inherit" });
+  if (result.status !== 0) throw new Error(failureMessage);
+}
+
+function prepareAndCheck(state, mode, publishing) {
+  // The local Linux builds run in OrbStack machines, which share /Users with this Mac but not its
+  // temporary directory, so a local release prepares its snapshot under target/.
+  const temporary = publishing === "local" ? join(state.root, "target") : tmpdir();
+  mkdirSync(temporary, { recursive: true });
+  const parent = mkdtempSync(join(temporary, "tickloop-release-"));
   const snapshot = join(parent, "snapshot");
   const added = git(["worktree", "add", "--detach", snapshot, state.commit], { readOnly: false });
   try {
@@ -168,6 +186,13 @@ function prepareAndCheck(state, mode) {
     const env = { ...process.env, CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR || join(state.root, "target") };
     const checked = command("cargo", ["check", "--locked", ...products.flatMap(product => ["-p", product.cargoName]), "--bins"], { cwd: snapshot, env, stdio: "inherit" });
     if (checked.status !== 0) throw new Error("cargo check failed; no version commit or release tag was created.");
+    if (publishing === "local") {
+      // Every archive is built from this snapshot, which the version commit reproduces exactly,
+      // before anything is committed, tagged or pushed.
+      rmSync(localArchives(state), { recursive: true, force: true });
+      runLocalStage(snapshot, ["check", snapshot], env, "Local checks failed; no version commit or release tag was created.");
+      runLocalStage(snapshot, ["build", snapshot, localArchives(state), ...products.map(product => product.tag)], env, "A local build failed; no version commit or release tag was created.");
+    }
     const changed = gitOutput(["diff", "--name-only", "HEAD"], "Could not inspect the checked release files.", { cwd: snapshot }).split("\n");
     if (changed.length !== changes.size || changed.some(path => !changes.has(path))) throw new Error("Release checks modified files outside the version plan.");
     for (const [path, content] of changes) if (readFileSync(join(snapshot, path), "utf8") !== content) throw new Error(`Release checks changed ${path} after its version was prepared.`);
@@ -178,7 +203,7 @@ function prepareAndCheck(state, mode) {
   }
 }
 
-function finalizeRelease(products, state, changes) {
+function finalizeRelease(products, state, changes, publishing) {
   if (!releaseSnapshotIsCurrent(state)) return false;
   assertBranchIncludesOrigin(state.branch);
   checkReleaseTargets(products);
@@ -208,25 +233,50 @@ function finalizeRelease(products, state, changes) {
     const pushed = git(["push", "--porcelain", "--atomic", "origin", ...refspecs], { readOnly: false });
     if (pushed.status !== 0) throw new Error(`Push failed; release commit ${commit} and local tags remain. Earlier tag batches may already be published. Inspect remote refs with git ls-remote origin ${state.branch} ${products.map(product => `refs/tags/${product.tag}`).join(" ")}, then retry only the missing refs with git push --atomic origin ${refspecs.join(" ")}. Do not rerun release to bump versions again. ${pushed.stderr.trim()}`);
   }
-  process.stdout.write(`Committed ${description} as ${commit}. Published ${products.map(product => product.tag).join(", ")} with ${state.branch.slice("refs/heads/".length)}. GitHub Actions will build and publish the packages and update marketplace.json.\n`);
+  const tags = products.map(product => product.tag);
+  const branchName = state.branch.slice("refs/heads/".length);
+  process.stdout.write(`Committed ${description} as ${commit}. Pushed ${tags.join(", ")} with ${branchName}.\n`);
+  if (publishing === "remote") {
+    // Tags start no workflow by themselves, so a remote release starts one per tag.
+    for (const tag of tags) {
+      const started = command("gh", ["workflow", "run", "release-ticks.yml", "--repo", expectedRepository, "--ref", tag]);
+      if (started.status !== 0) throw new Error(`Could not start the release workflow on ${tag}; start it from the Actions tab or with gh workflow run release-ticks.yml --repo ${expectedRepository} --ref ${tag}. ${started.stderr.trim()}`);
+    }
+    process.stdout.write("GitHub Actions will build and publish the packages and update marketplace.json.\n");
+  } else if (publishing === "local") {
+    const published = command(localStages(state.root), ["publish", localArchives(state), ...tags], { cwd: state.root, env: { ...process.env, RELEASE_BRANCH: branchName }, stdio: "inherit" });
+    if (published.status !== 0) throw new Error(`Publishing failed after ${tags.join(", ")} were pushed. Fix the cause, then finish with scripts/release-local.sh publish dist/release-local ${tags.join(" ")}; it keeps what was already published. Do not rerun release to bump versions again.`);
+    // The marketplace update was pushed from a separate checkout; bring this branch up to it.
+    const fetched = git(["fetch", "--quiet", "origin", branchName], { readOnly: false });
+    const merged = fetched.status === 0 ? git(["merge", "--ff-only", "--quiet", "FETCH_HEAD"], { readOnly: false }) : fetched;
+    if (merged.status !== 0) process.stderr.write(`Pull ${branchName} to get the marketplace update: ${merged.stderr.trim()}\n`);
+    process.stdout.write(`Published ${description} and updated marketplace.json.\n`);
+  } else {
+    process.stdout.write("Start the release workflow on each tag to build and publish the packages.\n");
+  }
   return true;
 }
 
 try {
-  const [mode, ...extra] = process.argv.slice(2);
-  if (extra.length || mode && !["--check", "--dry-run"].includes(mode)) throw new Error("Usage: [VERSION=X.Y.Z] [TICK_PACKAGES='longbridge futu'] node scripts/release.mjs [--check|--dry-run]");
+  const args = process.argv.slice(2);
+  const publishingFlags = { "--local": "local", "--remote": "remote" };
+  const modes = args.filter(arg => ["--check", "--dry-run"].includes(arg));
+  const publishings = args.filter(arg => arg in publishingFlags);
+  if (modes.length > 1 || publishings.length > 1 || modes.length + publishings.length !== args.length) throw new Error("Usage: [VERSION=X.Y.Z] [TICK_PACKAGES='longbridge futu'] node scripts/release.mjs [--local|--remote] [--check|--dry-run]");
+  const mode = modes[0];
+  const publishing = publishingFlags[publishings[0]];
   const releaseLock = acquireReleaseLock();
   try {
     const initial = preflight();
     for (let attempt = 0; attempt < maximumSnapshotAttempts; attempt++) {
       const state = preflight();
       if (state.branch !== initial.branch) throw new Error("The release branch changed while preparing the snapshot.");
-      const { products, changes } = prepareAndCheck(state, mode);
+      const { products, changes } = prepareAndCheck(state, mode, publishing);
       if (mode) {
         process.stdout.write(`Ready to bump ${products.map(product => `${product.label} ${product.version} → ${product.nextVersion}`).join(", ")}, create one version commit and tags ${products.map(product => product.tag).join(", ")}, then push ${state.branch.slice("refs/heads/".length)} and tags. No changes were made.\n`);
         break;
       }
-      if (finalizeRelease(products, state, changes)) break;
+      if (finalizeRelease(products, state, changes, publishing)) break;
       if (attempt + 1 === maximumSnapshotAttempts) throw new Error("HEAD kept advancing during release checks; no version commit or release tag was created. Retry when commits have settled.");
       process.stderr.write("HEAD advanced during checks; preparing and checking the latest committed snapshot again.\n");
     }

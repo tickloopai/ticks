@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -355,4 +355,68 @@ test("concurrent package releases wait for one shared lock and preserve both ver
   assert.equal(git(["rev-parse", "longbridge-v0.2.1^{}"], setup), git(["rev-parse", "HEAD^"], setup));
   assert.equal(git(["rev-parse", "futu-v0.4.1^{}"], setup), git(["rev-parse", "HEAD"], setup));
   assert.ok(!existsSync(join(setup.repo, ".git/ticks-release.lock")));
+});
+
+function stage(setup, name, body = "") {
+  const path = join(setup.base, name);
+  writeFileSync(path, `#!/bin/sh\nprintf '%s|%s|%s\\n' "$1" "$PWD" "$*" >> "$RELEASE_TEST_LOG"\n${body}`);
+  chmodSync(path, 0o700);
+  return path;
+}
+
+test("a local release checks and builds every tag in the versioned snapshot before committing, then publishes", t => {
+  const setup = fixture(t);
+  const stages = stage(setup, "release-local.sh", '[ "$1" != publish ] || [ "$RELEASE_BRANCH" = main ] || exit 9\n');
+  const result = command(process.execPath, [releaseScript, "--local"], setup, { TICK_RELEASE_LOCAL: stages });
+  assert.equal(result.status, 0, result.stderr);
+  const calls = readFileSync(setup.env.RELEASE_TEST_LOG, "utf8").trim().split("\n").filter(line => !line.startsWith("cargo "));
+  assert.deepEqual(calls.map(line => line.split("|")[0]), ["check", "build", "publish"]);
+  const repo = realpathSync(setup.repo), snapshot = calls[0].split("|")[1];
+  assert.ok(snapshot.startsWith(join(repo, "target")), snapshot);
+  assert.ok(calls[1].endsWith(`build ${snapshot} ${join(repo, "dist/release-local")} ${allTags.join(" ")}`), calls[1]);
+  assert.equal(calls[2], `publish|${repo}|publish ${join(repo, "dist/release-local")} ${allTags.join(" ")}`);
+  for (const tag of allTags) assert.equal(git(["ls-remote", "origin", `refs/tags/${tag}^{}`], setup).split("\t")[0], git(["rev-parse", "HEAD"], setup));
+  assert.match(result.stdout, /Published .* and updated marketplace\.json/);
+});
+
+test("a failed local build commits, tags and pushes nothing", t => {
+  const setup = fixture(t);
+  const stages = stage(setup, "release-local.sh", '[ "$1" != build ] || exit 1\n');
+  const result = command(process.execPath, [releaseScript, "--local"], setup, { TICK_RELEASE_LOCAL: stages });
+  assert.equal(result.status, 1); assert.match(result.stderr, /local build failed; no version commit or release tag/);
+  assert.equal(git(["rev-parse", "HEAD"], setup), setup.initial); assert.equal(git(["tag", "--list"], setup), "");
+  assert.equal(git(["ls-remote", "--refs", "origin"], setup), "");
+  assert.ok(!readFileSync(setup.env.RELEASE_TEST_LOG, "utf8").includes("publish|"));
+});
+
+test("a failed local publish keeps the pushed tags and says how to finish", t => {
+  const setup = fixture(t);
+  const stages = stage(setup, "release-local.sh", '[ "$1" != publish ] || exit 1\n');
+  const result = command(process.execPath, [releaseScript, "--local"], setup, { TICK_RELEASE_LOCAL: stages });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, new RegExp(`release-local\\.sh publish dist/release-local ${allTags.join(" ")}`));
+  assert.match(result.stderr, /Do not rerun release/);
+  for (const tag of allTags) assert.ok(git(["ls-remote", "origin", `refs/tags/${tag}`], setup));
+});
+
+test("a remote release starts the release workflow on every pushed tag and runs no local stage", t => {
+  const setup = fixture(t);
+  writeFileSync(join(setup.base, "bin", "gh"), `#!/bin/sh\nprintf 'gh %s\\n' "$*" >> "$RELEASE_TEST_LOG"\n`);
+  chmodSync(join(setup.base, "bin", "gh"), 0o700);
+  const stages = stage(setup, "release-local.sh", "exit 1\n");
+  const result = command(process.execPath, [releaseScript, "--remote"], setup, { TICK_RELEASE_LOCAL: stages });
+  assert.equal(result.status, 0, result.stderr);
+  const log = readFileSync(setup.env.RELEASE_TEST_LOG, "utf8");
+  for (const tag of allTags) assert.ok(log.includes(`gh workflow run release-ticks.yml --repo ${expectedRepository} --ref ${tag}\n`), tag);
+  assert.ok(!/^(check|build|publish)\|/m.test(log));
+  assert.match(result.stdout, /GitHub Actions will build/);
+});
+
+test("publishing flags combine with --check but not with each other", t => {
+  const setup = fixture(t);
+  const check = release(setup, "--check"); assert.equal(check.status, 0, check.stderr);
+  const checkedLocal = command(process.execPath, [releaseScript, "--local", "--check"], setup);
+  assert.equal(checkedLocal.status, 0, checkedLocal.stderr); assert.equal(git(["rev-parse", "HEAD"], setup), setup.initial);
+  assert.match(command(process.execPath, [releaseScript, "--local", "--remote"], setup).stderr, /Usage:/);
+  assert.match(command(process.execPath, [releaseScript, "--check", "--dry-run"], setup).stderr, /Usage:/);
 });

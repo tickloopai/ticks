@@ -24,7 +24,7 @@ fail() {
 }
 
 usage() {
-    echo "usage: RELEASE_TAG=<package>-vX.Y.Z $0 build | publish MARKETPLACE_CHECKOUT ARCHIVE_DIRECTORY | verify ARCHIVE_DIRECTORY" >&2
+    echo "usage: RELEASE_TAG=<package>-vX.Y.Z [RELEASE_TARGET=<target>] $0 build | [RELEASE_BRANCH=<branch>] $0 publish MARKETPLACE_CHECKOUT ARCHIVE_DIRECTORY | $0 verify ARCHIVE_DIRECTORY" >&2
     exit 2
 }
 
@@ -124,7 +124,16 @@ build_release() {
             fail "$archive holds more than the package, its license notices and licenses: $unexpected"
         unpacked=$scratch/$package
         mkdir "$unpacked"
-        tar -xzf "$archive" -C "$unpacked"
+        # Python rather than tar: GNU tar cannot unpack into new directories under OrbStack's
+        # x86_64 emulation, where local releases build the x86_64 Linux target.
+        python3 -I -c '
+import sys, tarfile
+with tarfile.open(sys.argv[1]) as archive:
+    if hasattr(tarfile, "data_filter"):
+        archive.extractall(sys.argv[2], filter="data")
+    else:
+        archive.extractall(sys.argv[2])
+' "$archive" "$unpacked"
         [ -d "$unpacked/skills" ] || fail "$archive has no skills/"
         [ -f "$unpacked/THIRD_PARTY_NOTICES.md" ] && [ -d "$unpacked/licenses" ] ||
             fail "$archive has no THIRD_PARTY_NOTICES.md and licenses/"
@@ -308,8 +317,10 @@ EOF
     if git -C "$checkout" diff --quiet -- marketplace.json README.md; then
         echo "The marketplace already lists $released."
     else
-        branch=$(git -C "$checkout" symbolic-ref --short HEAD) ||
-            fail "$checkout is not on a branch"
+        # RELEASE_BRANCH lets a detached checkout of the default branch, as local releases use,
+        # name the branch it updates.
+        branch=${RELEASE_BRANCH:-$(git -C "$checkout" symbolic-ref --short HEAD)} ||
+            fail "$checkout is not on a branch; set RELEASE_BRANCH"
         if [ -z "$(git -C "$checkout" config user.email || true)" ]; then
             export GIT_AUTHOR_NAME='github-actions[bot]'
             export GIT_AUTHOR_EMAIL='41898282+github-actions[bot]@users.noreply.github.com'

@@ -69,17 +69,20 @@ cp .cargo/config.toml.example .cargo/config.toml
 ## Releasing
 
 ```sh
-make release                                   # every package, each from its own version, patch + 1
+make release                                   # every package, each from its own version, patch + 1; built here
 make release TICK_PACKAGES=longbridge          # only longbridge
 VERSION=0.3.0 make release TICK_PACKAGES=futu  # an explicit, higher version
+make release REMOTE=1                          # the same, but GitHub Actions checks, builds and publishes
 node scripts/release.mjs --check               # preview; changes nothing
 ```
 
-To release from GitHub instead, run the **Release** workflow from the Actions tab on the default branch, with the packages (empty for every package) and an optional version. It runs `make release` there and then starts the release workflow below on each tag it pushed, since tags pushed with a workflow's `GITHUB_TOKEN` start no workflow by themselves.
+`make release` releases from this Mac, without GitHub Actions (`scripts/release-local.sh`). In a snapshot of the bumped versions it runs `make check` here and in two OrbStack Linux machines, `tl-arm` and `tl-x86` (`TICKS_LINUX_ARM64_MACHINE`, `TICKS_LINUX_X86_64_MACHINE`; a missing toolchain is installed in them), then builds and checks every package for all four targets, the macOS ones here and each Linux one in the machine of its architecture. Only when everything passed does it commit the versions and push the tags; it then publishes each Release with its four archives, updates `marketplace.json` from a temporary checkout of the default branch, verifies the downloads and fast-forwards your branch to the marketplace update. It needs OrbStack, Rosetta, the `aarch64-apple-darwin` and `x86_64-apple-darwin` Rust targets, and `gh` logged in with write access. If publishing fails after the push, fix the cause and run `scripts/release-local.sh publish dist/release-local <tags>`, which keeps what was published.
+
+`make release REMOTE=1` pushes the version commit and tags the same way, without local checks or builds, and starts the release workflow below on each tag. To release entirely from GitHub instead, run the **Release** workflow from the Actions tab on the default branch, with the packages (empty for every package) and an optional version. It runs `make release` there and then starts the release workflow below on each tag it pushed, since tags pushed with a workflow's `GITHUB_TOKEN` start no workflow by themselves.
 
 Versions come from each package's `Cargo.toml`, kept in step with its `tick-package.json` and `Cargo.lock`, independently of other packages and of Tickloop. The release runs from the committed `HEAD` of a branch that includes `origin`'s commits (pull first: the workflow commits marketplace updates there); other working-tree changes are left alone. In a temporary checkout it bumps the selected versions and runs `cargo check`, then commits the version files as one `chore(release): …`, creates one `<package>-v<version>` tag per package on that commit, and pushes the branch and tags atomically, at most three tags per push. A version must be newer than the package's existing tags and its `marketplace.json` entry.
 
-Each tag starts the release workflow, queued one package at a time:
+Pushing a tag starts nothing; the release workflow runs on a tag only when `make release REMOTE=1` or the Release workflow starts it, queued one package at a time:
 
 0. CI: the full suite on macOS and Linux (`.github/workflows/ci.yml`). Pushes and pull requests do not start CI, to save hosted runners; run `make check` locally, or start CI by hand from the Actions tab.
 1. Build and check, once per target on a runner of that architecture (`macos-15` for both macOS targets, the x86_64 one under Rosetta; `ubuntu-24.04` and `ubuntu-24.04-arm` for Linux): build the program, check the archive's contents, its architecture (and on Linux that it is statically linked), the ad-hoc signature on macOS, that `--help` runs and `--version` reports the version, and install it with the latest released Tickloop for that runner.

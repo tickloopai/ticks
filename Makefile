@@ -34,7 +34,9 @@ dev-ticks:
 		"$(TICKLOOP)" tick install --path "dist/ticks/$(HOST_TARGET)/$$package" || exit 1; \
 	done
 
-## Bump each selected Tick package, commit their versions together and push one <package>-vX.Y.Z tag each;
-## select with TICK_PACKAGES="longbridge futu", preview with: node scripts/release.mjs --check
+## Release each selected Tick package: check and build every target on this Mac and the OrbStack Linux
+## machines, then commit the versions, push one <package>-vX.Y.Z tag each, publish and update the
+## marketplace from here. REMOTE=1 pushes the tags and lets GitHub Actions check, build and publish.
+## Select with TICK_PACKAGES="longbridge futu"; preview with: node scripts/release.mjs --check
 release:
-	@node scripts/release.mjs
+	@node scripts/release.mjs $(if $(filter 1,$(REMOTE)),--remote,--local)

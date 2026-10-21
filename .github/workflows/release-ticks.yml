@@ -1,11 +1,9 @@
 name: Release Tick packages
 run-name: Release Tick packages ${{ github.ref_name }}
 
+# Started on a <package>-vX.Y.Z tag by `make release REMOTE=1` or the Release workflow, never by
+# pushing a tag: `make release` pushes tags too, but builds and publishes on the maintainer's machine.
 on:
-  push:
-    tags:
-      - '*-v*'
-  # Started on a tag by the Release workflow, whose GITHUB_TOKEN tag pushes start no workflow.
   workflow_dispatch:
 
 permissions:
