@@ -1,5 +1,5 @@
 [workspace]
-members = ["packages/*"]
+members = ["market/*", "packages/*"]
 resolver = "3"
 exclude = ["vendor/*"]
 
@@ -14,14 +14,18 @@ repository = "https://github.com/tickloopai/ticks"
 # these crates, pin that tag instead. To build against a local checkout, see
 # .cargo/config.toml.example.
 [workspace.dependencies]
-tickloop-tick-command = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
-tickloop-tick-market = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
 tickloop-tick-oauth = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
+tickloop-tick-oauth-test-server = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
 tickloop-tick-packages = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
-tickloop-tick-provider = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
+tickloop-tick-protocol = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
 tickloop-tick-sdk = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
-tickloop-tick-test-support = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
 tickloop-ui = { git = "https://github.com/tickloopai/tickloop", rev = "4f9ac812f5d05fa05cbdc12c54f85c1b0a8a4148" }
+
+# The financial Ticks and the provider interfaces they read, in market/.
+tickloop-tick-command = { path = "market/command" }
+tickloop-tick-market = { path = "market/views" }
+tickloop-tick-provider = { path = "market/provider" }
+tickloop-tick-test-support = { path = "market/test-support" }
 
 [profile.dev]
 debug = "line-tables-only"

@@ -46,6 +46,6 @@ tokio-util = "0.7"
 [dev-dependencies]
 tempfile = "3"
 tickloop-tick-sdk.workspace = true
-tickloop-tick-test-support.workspace = true
+tickloop-tick-oauth-test-server.workspace = true
 tokio = { version = "1", features = ["test-util"] }
 vt100 = "0.16.2"

@@ -26,7 +26,8 @@ Install one with `tickloop tick install <package>`.
 ## Layout
 
 - `marketplace.json`: every package with its version, description and per-platform download URL and SHA-256. Tickloop reads it from this path, so it stays at the repository root.
-- `packages/<package>/`: one Rust crate per package, building its program `tick-<package>`, with `tick-package.json` and `skills/`.
+- `packages/<package>/`: one Rust crate per package, building its program `tick-<package>`, with `tick-package.json` and `skills/`. `tickloop` holds the official Tickloop Ticks as subcommands of `tick-tickloop`, starting with the Reader.
+- `market/`: the financial Ticks the packages run, and the provider interfaces they read: `provider` (`tick_provider`), `views` (`tick_market`), `command` (`tick_command`), and `test-support` (mock providers and `tick-mock`, for tests only).
 - `tests/package_skill.rs`: checks shared by every package's Skill, such as naming only tools the Agent offers.
 - `vendor/`: patched third-party crates used through the root `Cargo.toml`; each has a README with the reason and the changes.
 - Releases: one release per package version, tagged `<package>-v<version>`, carrying `tick-<package>-<version>-<target>.tar.gz`.
@@ -43,7 +44,7 @@ Tickloop is the authentication client: credentials live in its config root under
 
 ## Building from source
 
-The packages build with current stable Rust (edition 2024) on macOS. They link Tick crates from [tickloopai/tickloop](https://github.com/tickloopai/tickloop), fetched by Git at the commit pinned in the root `Cargo.toml`.
+The packages build with current stable Rust (edition 2024) on macOS. They link the domain-agnostic Tick crates from [tickloopai/tickloop](https://github.com/tickloopai/tickloop) (the Tick protocol and SDK, terminal UI, package credentials and OAuth), fetched by Git at the commit pinned in the root `Cargo.toml`; the financial Ticks themselves live in `market/`.
 
 ```sh
 make build           # cargo build of both programs
@@ -62,7 +63,7 @@ git clone https://github.com/tickloopai/tickloop ../tickloop
 cp .cargo/config.toml.example .cargo/config.toml
 ```
 
-`.cargo/config.toml` is ignored by Git. Lock entries resolved through it are not valid for CI, so remove it and run `cargo update` against the pinned commit before committing `Cargo.lock`. To move to a newer Tickloop, change every `rev = "…"` in `Cargo.toml` (or replace it with a Tickloop release tag) and run `cargo update -p tickloop-tick-command`.
+`.cargo/config.toml` is ignored by Git. Lock entries resolved through it are not valid for CI, so remove it and run `cargo update` against the pinned commit before committing `Cargo.lock`. To move to a newer Tickloop, change every `rev = "…"` in `Cargo.toml` (or replace it with a Tickloop release tag) and run `cargo update -p tickloop-tick-sdk`.
 
 ## Releasing
 

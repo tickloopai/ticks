@@ -4,18 +4,18 @@
 #   git clone https://github.com/tickloopai/tickloop ../tickloop
 #   cp .cargo/config.toml.example .cargo/config.toml
 #
+# To build against a Tickloop worktree instead, replace ../tickloop below with its path.
+#
 # .cargo/config.toml is ignored by Git. Cargo.lock entries resolved through these paths are
 # not valid for CI: delete .cargo/config.toml and run `cargo update` against the pinned
 # commit before committing Cargo.lock. Release builds run in a fresh checkout and never read it.
 
 [patch."https://github.com/tickloopai/tickloop"]
-tickloop-tick-command = { path = "../tickloop/tick/command" }
-tickloop-tick-market = { path = "../tickloop/tick/market" }
 tickloop-tick-oauth = { path = "../tickloop/tick/oauth" }
+tickloop-tick-oauth-test-server = { path = "../tickloop/tick/oauth-test-server" }
 tickloop-tick-packages = { path = "../tickloop/tick/packages" }
-tickloop-tick-provider = { path = "../tickloop/tick/provider" }
+tickloop-tick-protocol = { path = "../tickloop/tick/protocol" }
 tickloop-tick-sdk = { path = "../tickloop/tick/sdk" }
-tickloop-tick-test-support = { path = "../tickloop/tick/test-support" }
 tickloop-ui = { path = "../tickloop/ui" }
 
 # Overrides the crossterm patch in Cargo.toml.

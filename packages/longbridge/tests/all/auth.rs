@@ -9,11 +9,11 @@ use tick_longbridge::{
     auth::{self, DeviceLogin, LoginNotice},
     region::Region,
 };
-use tick_packages::{LoginState, OAuthIssuer, PackageAuth};
-use tick_provider::exit_code;
-use tick_test_support::authorization_server::{
+use tick_oauth_test_server::{
     AuthorizationServer, DEVICE_CODE_GRANT, REGISTRATION_PATH, TOKEN_PATH, TokenReply, USER_CODE,
 };
+use tick_packages::{LoginState, OAuthIssuer, PackageAuth};
+use tick_provider::exit_code;
 use tokio::sync::mpsc;
 
 use crate::support::login::{credentials, now, save, saved, token};

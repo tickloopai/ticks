@@ -1,0 +1,33 @@
+[package]
+name = "tickloop-tick-test-support"
+description = "Test-only mock quotes, account, news, options, community posts and earnings release and the tick-mock executable that runs a Tick on them"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "tick_test_support"
+doctest = false
+
+[[bin]]
+name = "tick-mock"
+path = "src/main.rs"
+
+[dependencies]
+async-trait = "0.1"
+clap = { version = "4", features = ["derive"] }
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+serde_json = "1"
+tickloop-tick-command.workspace = true
+tickloop-tick-market.workspace = true
+tickloop-tick-provider.workspace = true
+time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde"] }
+time-tz = "2"
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+
+[dev-dependencies]
+libc = "0.2"
+tempfile = "3"
+tickloop-tick-protocol.workspace = true
