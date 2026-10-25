@@ -3,3 +3,7 @@ dist/
 .cargo/config.toml
 .DS_Store
 !/vendor/
+
+# Maintainer-local workspace and agent-skill configuration (specs, tickets, docs/agents); never published.
+.scratch/
+/docs/

@@ -7,7 +7,7 @@ The official Tick marketplace for Tickloop and the source of its Tick packages. 
 - Shared terms follow Tickloop's [CONTEXT.md](https://github.com/tickloopai/tickloop/blob/main/CONTEXT.md); terms specific to this repository are in [CONTEXT.md](./CONTEXT.md). Use those names in code, UI and discussion.
 - When a change conflicts with documented behavior, say so; never change a meaning silently. When documents and source disagree, the source wins.
 - Division of documents: agent instructions live only in AGENTS.md (no CLAUDE.md); CONTEXT.md holds term definitions only; README.md describes user-facing usage only; development, checks, tests and releases are in [CONTRIBUTING.md](./CONTRIBUTING.md).
-- `.scratch/` is maintainer-local and outside Git; a new feature's spec goes in `.scratch/<feature>/`.
+- `.scratch/` and `docs/` are maintainer-local and excluded by `.gitignore`; a new feature's spec goes in `.scratch/<feature>/`. Pointers to them apply only when they exist.
 - Maintainer-local supplement: @~/tickloopai/AGENTS.md (ignore when absent).
 
 ## Core behavior
@@ -60,3 +60,19 @@ Dependency boundaries:
 - Check commands, test layout and PR rules are only in [CONTRIBUTING.md](./CONTRIBUTING.md); a change is done when `make check` passes.
 - A package's `tick-package.json` `version` must equal its Cargo version. Do not bump versions in normal changes, and never hand-edit `marketplace.json` or the README's "Packages" section; the release does both.
 - When reporting verification, list local automated checks separately from runs against a real Tickloop host or a real broker account.
+
+## Agent skills
+
+These files are maintainer-local (outside Git); skip this section when they are absent. Public collaboration uses GitHub Issues and Pull Requests.
+
+### Issue tracker
+
+Specs and tickets are local Markdown under `.scratch/<feature>/`, never committed. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) as `Status:` lines in ticket files. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: CONTEXT.md at the root, ADRs in `docs/adr/`. See `docs/agents/domain.md`.
