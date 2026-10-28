@@ -2,13 +2,7 @@ use std::{cell::Cell, io::Write, sync::Arc, time::Duration};
 
 use crossterm::event::{Event, KeyCode};
 use futures_util::Stream;
-use ratatui::{
-    Frame, Terminal,
-    backend::Backend,
-    layout::Rect,
-    style::Style,
-    widgets::{Block, Borders},
-};
+use ratatui::{Frame, Terminal, backend::Backend, layout::Rect, style::Style};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -239,20 +233,17 @@ impl CommunityView {
         serde_json::to_value(reply).map_err(|error| Error::usage(error.to_string()))
     }
 
-    fn draw_post(&self, frame: &mut Frame<'_>, post: &MemberPost, settings: &Settings) {
-        let area = frame.area();
+    fn draw_post(
+        &self,
+        frame: &mut Frame<'_>,
+        post: &MemberPost,
+        state: &mut ViewState,
+        settings: &Settings,
+    ) {
+        let inner = frame.area();
         let styles = settings.styles();
-        let block = Block::default()
-            .title(format!(
-                " {} · {} ",
-                self.feed.member.nickname,
-                post.kind.label()
-            ))
-            .borders(Borders::ALL)
-            .style(styles.panel_base())
-            .border_style(styles.border);
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
+        frame.buffer_mut().set_style(inner, styles.panel_base());
+        state.title = format!("{} · {}", self.feed.member.nickname, post.kind.label());
         let heading = if post.title.is_empty() {
             String::new()
         } else {
@@ -271,9 +262,7 @@ impl CommunityView {
             settings.ambiguous_width,
             &styles,
         );
-        let visible = inner
-            .height
-            .saturating_sub(crate::runtime::key_hint_rows(settings)) as usize;
+        let visible = inner.height.saturating_sub(crate::runtime::KEY_LINE_ROWS) as usize;
         self.page_size.set(visible.max(1));
         let offset = self
             .detail_scroll
@@ -318,7 +307,7 @@ impl LiveView for CommunityView {
         crate::metadata::TickKind::Community
     }
     fn title(&self) -> String {
-        format!("Community · {}", self.feed.member.nickname)
+        self.feed.member.nickname.clone()
     }
     fn table(&self) -> TableData {
         self.feed.table()
@@ -402,17 +391,13 @@ impl LiveView for CommunityView {
             .open_topic
             .and_then(|topic| self.feed.posts.iter().find(|post| post.topic_id == topic))
         {
-            self.draw_post(frame, post, settings);
+            self.draw_post(frame, post, state, settings);
             return;
         }
         let styles = settings.styles();
-        let block = Block::default()
-            .title(format!(" {} ", self.title()))
-            .borders(Borders::ALL)
-            .style(styles.panel_base())
-            .border_style(styles.border);
-        let inner = block.inner(frame.area());
-        frame.render_widget(block, frame.area());
+        let inner = frame.area();
+        frame.buffer_mut().set_style(inner, styles.panel_base());
+        state.title = self.title();
         if inner.width == 0 || inner.height < 2 {
             return;
         }
@@ -432,8 +417,7 @@ impl LiveView for CommunityView {
         // The header row, and the key line when the screen shows one.
         let visible = inner
             .height
-            .saturating_sub(1 + crate::runtime::key_hint_rows(settings))
-            as usize;
+            .saturating_sub(1 + crate::runtime::KEY_LINE_ROWS) as usize;
         self.page_size.set(visible.max(1));
         let posts = &self.feed.posts;
         state.selected = self.selected_index();

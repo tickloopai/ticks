@@ -6,7 +6,7 @@ use ratatui::{
     Frame, Terminal,
     backend::Backend,
     layout::Rect,
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Paragraph, Wrap},
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -37,6 +37,10 @@ use tick_sdk::{stream::TickStream, tools::ToolCall};
 
 /// The prose rows a short Panel keeps below a wrapped document heading.
 const MINIMUM_BODY_ROWS: u16 = 3;
+/// The schemes of an original the terminal opens as a web page.
+const WEB_SCHEMES: [&str; 2] = ["https://", "http://"];
+/// Marks the original as a link to open.
+const OPEN_MARK: &str = "↗";
 const FOOTER_SEPARATOR: &str = "  ";
 
 #[derive(Deserialize, JsonSchema)]
@@ -817,24 +821,11 @@ impl LiveView for ReaderView {
     fn help(&self) -> &'static str {
         "j/k / Ctrl+N/P / arrows  Navigate / scroll\nEnter  Open selected document / section\nd  Documents    t  Table of contents\n[ / ]  Previous / next section\n/  Search    n / N  Next / previous visible match\nc  Show stable citation    a  Ask Chat about visible paragraph\no  Open original URL/path    R  Retry context originals\nPageUp/PageDown  Page    g/G  Start/end\nBackspace  Return / clear search\n?  Help\nSearch / original editor: Enter apply · Ctrl+C cancel"
     }
-    fn draw(&self, frame: &mut Frame<'_>, _: &mut ViewState, settings: &Settings) {
+    fn draw(&self, frame: &mut Frame<'_>, state: &mut ViewState, settings: &Settings) {
         let styles = settings.styles();
-        let area = frame.area();
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Reader · 财报原文 ")
-            .style(styles.panel_base())
-            .border_style(styles.border);
-        let inner = block.inner(Rect::new(
-            area.x,
-            area.y,
-            area.width,
-            area.height.saturating_sub(1),
-        ));
-        frame.render_widget(
-            block,
-            Rect::new(area.x, area.y, area.width, area.height.saturating_sub(1)),
-        );
+        let inner = frame.area();
+        frame.buffer_mut().set_style(inner, styles.panel_base());
+        state.title = "财报原文".to_owned();
         // A line of prose and the key line are the least a Panel reads with.
         if inner.width == 0 || inner.height < 2 {
             return;
@@ -879,13 +870,12 @@ impl LiveView for ReaderView {
             return;
         };
         let header = format!(
-            "{} · {}\n{}\nPublished: {} · {}",
+            "{} · {}\nPublished: {} · {}",
             document.title,
             document
                 .fiscal_period
                 .as_deref()
                 .unwrap_or("period unspecified"),
-            document.origin,
             document.published_at.as_deref().unwrap_or("unknown"),
             &document.revision[..12]
         );
@@ -893,13 +883,25 @@ impl LiveView for ReaderView {
         let header = Paragraph::new(header)
             .style(styles.text)
             .wrap(Wrap { trim: false });
+        let room = inner.height.saturating_sub(1 + MINIMUM_BODY_ROWS);
+        // The original takes a row of its own when the Panel has one to spare.
+        let origin_rows = u16::from(room > 1);
         let header_rows = u16::try_from(header.line_count(inner.width))
             .unwrap_or(u16::MAX)
-            .min(inner.height.saturating_sub(1 + MINIMUM_BODY_ROWS));
+            .min(room - origin_rows.min(room));
         frame.render_widget(
             header,
             Rect::new(inner.x, inner.y, inner.width, header_rows),
         );
+        if origin_rows > 0 {
+            draw_origin(
+                frame,
+                &document.origin,
+                Rect::new(inner.x, inner.y + header_rows, inner.width, 1),
+                settings,
+            );
+        }
+        let header_rows = header_rows + origin_rows;
         let body = Rect::new(
             inner.x,
             inner.y + header_rows,
@@ -1144,6 +1146,37 @@ impl LiveView for ReaderView {
             settings.ambiguous_width,
             styles.muted_text,
         );
+    }
+}
+
+/// The document's original on one `line`: a web page as a link the terminal opens, shown
+/// without its scheme and cut to the line; any other origin as it is.
+fn draw_origin(frame: &mut Frame<'_>, origin: &str, line: Rect, settings: &Settings) {
+    let styles = settings.styles();
+    let web_page = WEB_SCHEMES
+        .iter()
+        .find_map(|scheme| origin.strip_prefix(scheme));
+    let text = match web_page {
+        Some(page) => format!("{OPEN_MARK} {page}"),
+        None => origin.to_owned(),
+    };
+    let text =
+        tickloop_ui::format::truncate(&text, usize::from(line.width), settings.ambiguous_width);
+    write_text(
+        frame.buffer_mut(),
+        line.x,
+        line.y,
+        &text,
+        usize::from(line.width),
+        settings.ambiguous_width,
+        if web_page.is_some() {
+            styles.text.patch(styles.link)
+        } else {
+            styles.text
+        },
+    );
+    if web_page.is_some() {
+        tickloop_ui::hyperlink::link_rows(frame.buffer_mut(), line, &[text], origin);
     }
 }
 

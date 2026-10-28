@@ -38,9 +38,12 @@ const SNAPSHOT_TOOL: &str = "snapshot";
 const EXPIRATIONS_TOOL: &str = "expirations";
 const EVENT_HISTORY_TOOL: &str = "event_history";
 const TABLE_HEADER_ROWS: u16 = 1;
-/// The narrowest Panel that holds the strike, both bid/ask pairs and both IVs; a narrower one
-/// shows the compact chain of midpoints and a two-line summary.
-const FULL_CHAIN_COLUMNS: u16 = 58;
+/// The narrowest view inside the frame that holds the strike, both bid/ask pairs and both IVs; a
+/// narrower one shows the compact chain of midpoints and a two-line summary.
+const FULL_CHAIN_COLUMNS: u16 = 56;
+/// Inside the frame, the width that also holds the open interest, and then the volumes.
+const WIDE_CHAIN_COLUMNS: u16 = 78;
+const WIDEST_CHAIN_COLUMNS: u16 = 110;
 const COMPACT_HEADERS: [&str; 5] = ["Strike", "C mid", "P mid", "C IV%", "P IV%"];
 /// The strike and both midpoints, which the compact chain always shows.
 const MIDPOINT_COLUMNS: usize = 3;
@@ -483,25 +486,22 @@ impl OptionsView {
         })
     }
 
-    /// The title that fits `columns`: the full one, else without the word Options, else the
-    /// symbol and expiry alone.
-    fn panel_title(&self, columns: u16, settings: &Settings) -> String {
-        let title = self.title();
-        if self.research.is_some() {
-            return title;
-        }
-        let candidates = [
-            title,
-            format!(
-                "{} · {} · {}",
-                self.snapshot.symbol, self.snapshot.expiry, self.snapshot.source
-            ),
-            format!("{} · {}", self.snapshot.symbol, self.snapshot.expiry),
-        ];
+    /// The frame's title that fits `columns`: the full one, else without the source, else the
+    /// expiry or observation alone, as the Monitor names the Tick and its symbol already.
+    fn panel_title(&self, columns: usize, settings: &Settings) -> String {
+        let candidates = if self.research.is_some() {
+            vec![self.title(), self.observation_label().to_string()]
+        } else {
+            vec![
+                self.title(),
+                format!("{} · {}", self.snapshot.symbol, self.snapshot.expiry),
+                self.snapshot.expiry.clone(),
+            ]
+        };
         let fitting = candidates
             .iter()
             .position(|title| {
-                tickloop_ui::format::width(title, settings.ambiguous_width) <= usize::from(columns)
+                tickloop_ui::format::width(title, settings.ambiguous_width) <= columns
             })
             .unwrap_or(candidates.len() - 1);
         candidates[fitting].clone()
@@ -598,14 +598,10 @@ impl LiveView for OptionsView {
     }
     fn title(&self) -> String {
         if let Some(context) = &self.research {
-            return format!(
-                "{} · Options · {}",
-                context.title(),
-                self.observation_label()
-            );
+            return format!("{} · {}", context.title(), self.observation_label());
         }
         format!(
-            "{} · Options · {} · {}",
+            "{} · {} · {}",
             self.snapshot.symbol, self.snapshot.expiry, self.snapshot.source
         )
     }
@@ -877,7 +873,7 @@ impl LiveView for OptionsView {
         } else {
             description
         };
-        let body = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(1));
+        let body = area;
         let description = Paragraph::new(description)
             .style(styles.text)
             .wrap(Wrap { trim: false });
@@ -891,9 +887,9 @@ impl LiveView for OptionsView {
         .max(u16::try_from(description.line_count(body.width)).unwrap_or(u16::MAX));
         let note = match self.notice.as_deref() {
             Some(notice) => notice.to_owned(),
-            // A card the user only looks at keeps the pricing caveat, without the keys.
-            None if !settings.key_hints && self.research.is_some() => String::new(),
-            None if !settings.key_hints => PRICING_NOTE.to_owned(),
+            // A card the user only looks at leaves the keys' line blank and keeps the caveat.
+            None if !settings.key_hints && self.research.is_some() => "\n".to_owned(),
+            None if !settings.key_hints => format!("\n{PRICING_NOTE}"),
             None if self.research.is_some() => "b before · p after · c current · a Ask Chat · Enter details\ns save CURRENT · r refresh current · h event history · Backspace back".to_owned(),
             None if !compact => format!("[ ] expiry · Enter details · r refresh · s save · h history · Backspace back\n{PRICING_NOTE}"),
             None => {
@@ -916,29 +912,22 @@ impl LiveView for OptionsView {
         let note = Paragraph::new(note)
             .style(styles.muted_text)
             .wrap(Wrap { trim: false });
-        let note_rows = u16::try_from(note.line_count(body.width))
-            .unwrap_or(u16::MAX)
-            .max(if settings.key_hints { 2 } else { 0 });
+        let note_rows = 2.max(u16::try_from(note.line_count(body.width)).unwrap_or(u16::MAX));
         let parts = Layout::vertical([
-            Constraint::Length(1),
             Constraint::Length(description_rows),
             Constraint::Min(3),
             Constraint::Length(note_rows),
         ])
         .split(body);
-        frame.render_widget(
-            Paragraph::new(self.panel_title(area.width, settings))
-                .style(styles.panel_base().patch(styles.title)),
-            parts[0],
-        );
-        frame.render_widget(description, parts[1]);
+        state.title = self.panel_title(crate::runtime::frame_title_columns(area.width), settings);
+        frame.render_widget(description, parts[0]);
         let table = self.table();
         state.selected = state.selected.min(table.rows.len().saturating_sub(1));
         let columns = if self.history.is_some() {
             4
-        } else if area.width >= 112 {
+        } else if area.width >= WIDEST_CHAIN_COLUMNS {
             9
-        } else if area.width >= 80 {
+        } else if area.width >= WIDE_CHAIN_COLUMNS {
             7
         } else {
             5
@@ -969,7 +958,7 @@ impl LiveView for OptionsView {
         } = self
             .shown_snapshot()
             .filter(|_| compact && self.history.is_none())
-            .map(|snapshot| compact_chain(snapshot, parts[2].width))
+            .map(|snapshot| compact_chain(snapshot, parts[1].width))
             .unwrap_or_else(|| Chain {
                 headers: table.headers.iter().take(columns).copied().collect(),
                 cells: table
@@ -994,10 +983,10 @@ impl LiveView for OptionsView {
             .row_highlight_style(styles.selection)
             .highlight_symbol("› ");
         let mut table_state = TableState::default().with_selected(Some(state.selected));
-        frame.render_stateful_widget(widget, parts[2], &mut table_state);
+        frame.render_stateful_widget(widget, parts[1], &mut table_state);
         state.focus_row =
-            Some(parts[2].y + TABLE_HEADER_ROWS + (state.selected - table_state.offset()) as u16);
-        frame.render_widget(note, parts[3]);
+            Some(parts[1].y + TABLE_HEADER_ROWS + (state.selected - table_state.offset()) as u16);
+        frame.render_widget(note, parts[2]);
         if self.detail {
             let popup = Rect::new(
                 area.x + 1,

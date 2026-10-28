@@ -137,8 +137,9 @@ impl QuoteView {
 
 #[async_trait::async_trait]
 impl crate::runtime::LiveView for QuoteView {
+    /// The Monitor names the Tick and its symbols, so its frame needs no title of its own.
     fn title(&self) -> String {
-        "Quotes".into()
+        String::new()
     }
     fn table(&self) -> TableData {
         table(&self.quotes)

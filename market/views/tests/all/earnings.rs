@@ -736,7 +736,7 @@ async fn a_panel_below_the_minimum_size_scrolls_over_the_minimum_layout() {
 
     assert!(screen.contains("Compare periods"), "{screen}");
     // The indicator keeps its keys; the narrow Panel has no room left for the word.
-    assert!(screen.contains("< > ↕ 1–11/14 { }"), "{screen}");
+    assert!(screen.contains("< > ↕ 1–9/12 { }"), "{screen}");
 }
 
 #[tokio::test]
@@ -745,7 +745,8 @@ async fn the_minimum_panel_draws_fiscal_comparisons_and_the_read_time() {
     let minimum = TickKind::Earnings.minimum_panel_size();
     let screen = panel(&api, minimum.columns, minimum.rows).await;
 
-    assert!(screen.contains("TSLA.US · Compare periods"), "{screen}");
+    // The Monitor names the symbol, so the narrowest frame's title keeps the mode.
+    assert!(screen.contains("Compare periods"), "{screen}");
     for heading in ["Period", "EPS Act", "EPS YoY"] {
         assert!(screen.contains(heading), "missing {heading}:\n{screen}");
     }
@@ -758,7 +759,7 @@ async fn the_full_panel_draws_fiscal_comparisons_and_source_time() {
     let api = Fundamentals::new(time::OffsetDateTime::now_utc().date());
     let screen = panel(&api, FULL_PANEL_COLUMNS, 14).await;
 
-    assert!(screen.contains("TSLA.US · Earnings"), "{screen}");
+    assert!(screen.contains("TSLA.US · Compare periods"), "{screen}");
     for heading in ["Period", "EPS Act", "Revenue", "YoY"] {
         assert!(screen.contains(heading), "missing {heading}:\n{screen}");
     }
@@ -877,7 +878,7 @@ async fn in_the_running_tick_the_prompt_keeps_q_as_text_and_ctrl_c_cancels_it() 
         .map(|cell| cell.symbol())
         .collect();
     assert!(
-        screen.contains(" AAPL.US · Earnings"),
+        screen.contains(" AAPL.US · Compare periods"),
         "Ctrl+C discarded the first prompt and Backspace edited the second: {screen}"
     );
 }

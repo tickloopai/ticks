@@ -1,5 +1,5 @@
-//! An in-memory backend a Tick draws into when its Panel is smaller than its minimum layout;
-//! the scroll viewport then copies the visible slice of the buffer onto the Panel.
+//! An in-memory backend a Tick's view and its whole screen draw into: the runtime takes each
+//! frame's buffer and cursor from it before it writes anything to the terminal.
 use std::convert::Infallible;
 
 use ratatui::{
@@ -21,10 +21,6 @@ impl CanvasBackend {
             cursor: Position::ORIGIN,
             is_cursor_visible: false,
         }
-    }
-
-    pub fn buffer(&self) -> &Buffer {
-        &self.buffer
     }
 
     /// The canvas cell of the cursor the view placed in its last frame, if it placed one.

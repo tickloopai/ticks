@@ -22,8 +22,7 @@ const LAPTOP: (u16, u16) = (80, 24);
 const MONITOR_COLUMNS: u16 = 30;
 /// The width of a Monitor card the user has not narrowed.
 const MONITOR_CARD_COLUMNS: u16 = 40;
-/// What the status row on the bottom line ends with: the help and quit keys, or an open
-/// editor's keys.
+/// What the frame's bottom edge carries: the help and quit keys, or an open editor's keys.
 const STATUS_KEYS: [&str; 2] = ["q Quit", "Ctrl+C Cancel"];
 const HELP_SCROLL_HINT: &str = "j/k more";
 /// Fields a card of the Tick's minimum rows leaves for a taller one: the event chart's window
@@ -92,7 +91,6 @@ fn every_tick() -> Vec<Scenario> {
             TickKind::Quote,
             &[],
             &[
-                "Quotes",
                 "700.HK",
                 "Demo · 腾讯控股",
                 "480.20",
@@ -111,7 +109,7 @@ fn every_tick() -> Vec<Scenario> {
             TickKind::Watchlist,
             &[],
             &[
-                "Watchlist · Demo · US",
+                "Demo · US",
                 "▶ TSLA.US",
                 "Demo · Tesla",
                 "248.50",
@@ -147,7 +145,7 @@ fn every_tick() -> Vec<Scenario> {
                     "Baseline 2026-08-07 regular close",
                     "America/New_York",
                     "v View · r / [ ] Range · e Event · Enter Detail",
-                    "? Help · q Quit",
+                    "? Help  q Quit",
                 ],
             )
         },
@@ -155,7 +153,7 @@ fn every_tick() -> Vec<Scenario> {
             TickKind::Positions,
             &[],
             &[
-                "Positions · 模拟盘账户",
+                "模拟盘账户",
                 "Qty",
                 "P/L %",
                 "TSLA.US",
@@ -171,27 +169,27 @@ fn every_tick() -> Vec<Scenario> {
             TickKind::News,
             &[],
             &[
-                "News · Market",
+                "Market",
                 "09:30",
                 "示例资讯",
                 "Demo · Market recap",
-                "Enter Read  ·  ? Help  ·  q Quit",
+                "Enter Read",
             ],
         ),
         scenario(
             TickKind::News,
             &[KeyCode::Enter],
-            &["示例资讯正文", "Backspace Back · j/k Scroll · q Quit"],
+            &["示例资讯正文", "Backspace Back · j/k Scroll"],
         ),
         scenario(
             TickKind::Community,
             &[],
             &[
-                "Community · Demo · 示例用户",
+                "Demo · 示例用户",
                 "09-10",
                 "Article",
                 "$Demo · Tesla",
-                "Enter Read  ·  ? Help  ·  q Quit",
+                "Enter Read",
             ],
         ),
         scenario(
@@ -200,14 +198,14 @@ fn every_tick() -> Vec<Scenario> {
             &[
                 "今天放量突破",
                 "09:30 · topic 1003",
-                "Backspace Back · j/k Scroll · q Quit",
+                "Backspace Back · j/k Scroll",
             ],
         ),
         scenario(
             TickKind::Earnings,
             &[],
             &[
-                "TSLA.US · Earnings · Compare periods",
+                "TSLA.US · Compare periods",
                 "EPS Act",
                 "EPS YoY",
                 "Rev Act",
@@ -222,7 +220,7 @@ fn every_tick() -> Vec<Scenario> {
             TickKind::Earnings,
             &[KeyCode::Enter],
             &[
-                "TSLA.US · Earnings · FY2026-Q2",
+                "TSLA.US · FY2026-Q2",
                 "Metric",
                 "Estimate",
                 "27300000000",
@@ -238,7 +236,7 @@ fn every_tick() -> Vec<Scenario> {
                 TickKind::Earnings,
                 &[KeyCode::Enter],
                 &[
-                    "TSLA.US · Earnings · FY2026-Q2",
+                    "TSLA.US · FY2026-Q2",
                     "Longbridge · ",
                     " UTC · estimates not archived",
                 ],
@@ -287,7 +285,7 @@ fn every_tick() -> Vec<Scenario> {
             TickKind::Options,
             &[],
             &[
-                "AAPL.US · Options",
+                "AAPL.US · 2026-",
                 "Spot 100.00",
                 "through",
                 "Observed",
@@ -303,12 +301,7 @@ fn every_tick() -> Vec<Scenario> {
         scenario(
             TickKind::Reader,
             &[],
-            &[
-                "Reader · 财报原文",
-                "Quarterly results",
-                "Revenue was $12.8",
-                "1/4",
-            ],
+            &["财报原文", "Quarterly results", "Revenue was $12.8", "1/4"],
         ),
     ]
 }
@@ -320,15 +313,7 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
         scenario(
             TickKind::Quote,
             &[],
-            &[
-                "Quotes",
-                "700.HK",
-                "480.20",
-                "-2.40%",
-                "-11.80",
-                "H 4",
-                "?  q Quit",
-            ],
+            &["700.HK", "480.20", "-2.40%", "-11.80", "H 4", "?  q Quit"],
         ),
         scenario(
             TickKind::Quote,
@@ -338,13 +323,7 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
         scenario(
             TickKind::Watchlist,
             &[],
-            &[
-                "Watchlist · Demo · US",
-                "▶ TSLA.US",
-                "248.50",
-                "+3.54%",
-                "+8.50",
-            ],
+            &["Demo · US", "▶ TSLA.US", "248.50", "+3.54%", "+8.50"],
         ),
         scenario(
             TickKind::Kline,
@@ -368,7 +347,7 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
                 TickKind::Kline,
                 &[],
                 &[
-                    "DEMO.US · Event line / 1m",
+                    "Event line / 1m",
                     "Auto event window ·",
                     "Release 2026-08-07 16:05",
                     "Baseline 243.4 · 2026-08-07",
@@ -381,7 +360,7 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
             TickKind::Positions,
             &[],
             &[
-                "Positions · 模拟盘账户",
+                "模拟盘账户",
                 "P/L",
                 "P/L %",
                 "TSLA.US",
@@ -394,11 +373,11 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
             TickKind::News,
             &[],
             &[
-                "News · Market",
+                "Market",
                 "Time",
                 "09:30",
                 "Demo · Market recap",
-                "Enter Read  ·  ? Help",
+                "Enter Read",
             ],
         ),
         scenario(
@@ -410,11 +389,11 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
             TickKind::Community,
             &[],
             &[
-                "Community · Demo · 示例用户",
+                "Demo · 示例用户",
                 "Date",
                 "09-10",
                 "$Demo · Tesla",
-                "Enter Read  ·  ? Help",
+                "Enter Read",
             ],
         ),
         scenario(
@@ -425,13 +404,7 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
         scenario(
             TickKind::Earnings,
             &[],
-            &[
-                "TSLA.US · Compare periods",
-                "UTC",
-                "EPS Act",
-                "EPS YoY",
-                "Q2 2026",
-            ],
+            &["Compare periods", "UTC", "EPS Act", "EPS YoY", "Q2 2026"],
         ),
         scenario(
             TickKind::Earnings,
@@ -456,28 +429,18 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
         scenario(
             TickKind::Earnings,
             &[KeyCode::Char('r')],
-            &[
-                "TSLA.US · Market reactions",
-                "Day",
-                "Move",
-                "+0.79%",
-                "Counts",
-            ],
+            &["Market reactions", "Day", "Move", "+0.79%", "Counts"],
         ),
         scenario(
             TickKind::Earnings,
             &[KeyCode::Char('f')],
-            &[
-                "TSLA.US · Period originals",
-                "body not verified",
-                "Original",
-            ],
+            &["Period originals", "body not verified", "Original"],
         ),
         scenario(
             TickKind::Earnings,
             &[KeyCode::Char('u')],
             &[
-                "TSLA.US · Upcoming earnings",
+                "Upcoming earnings",
                 "awaiting actuals",
                 "Upcoming",
                 "Not identified",
@@ -514,7 +477,7 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
             TickKind::Reader,
             &[],
             &[
-                "Reader · 财报原文",
+                "财报原文",
                 "DEMO · FY2026 Q2 Earnings",
                 "Quarterly results",
                 "Revenue was $12.8",
@@ -801,7 +764,7 @@ async fn every_tick_holds_its_layout_at_its_full_minimum_size() {
 /// keeps the status row on the bottom line; what a short card leaves below the fold, such as
 /// an article's body or the positions' totals, the Tick's own keys scroll to.
 #[tokio::test(start_paused = true)]
-async fn every_tick_fits_the_monitor_card_sizes_with_its_status_row_at_the_bottom() {
+async fn every_tick_fits_the_monitor_card_sizes_inside_a_whole_frame() {
     let mut failures = Vec::new();
     for scenario in every_tick_at_the_minimum_width() {
         let minimum = scenario.minimum().rows;
@@ -827,9 +790,12 @@ async fn every_tick_fits_the_monitor_card_sizes_with_its_status_row_at_the_botto
                     }
                 }
             }
+            if let Some(problem) = frame_problem(&cells) {
+                failures.push(format!("{label} {problem}:\n{frame}"));
+            }
             let status = row(&cells, usize::from(rows) - 1);
             if !STATUS_KEYS.iter().any(|keys| status.contains(keys)) {
-                failures.push(format!("{label} has no status row at the bottom:\n{frame}"));
+                failures.push(format!("{label} has no keys on its bottom edge:\n{frame}"));
             }
         }
     }
@@ -860,7 +826,8 @@ async fn the_shortest_narrow_event_chart_keeps_its_popups_way_out_and_the_reader
     let detail = text(&render(&event(&[KeyCode::Enter]), minimum.columns, minimum.rows).await);
     assert!(detail.contains("Backspace Back"), "{detail}");
     let editor = text(&render(&event(&[KeyCode::Char('e')]), minimum.columns, 24).await);
-    assert!(editor.contains("Enter Apply"), "{editor}");
+    // The editor's keys wrap whole words inside the frame.
+    assert!(editor.contains("Ctrl+C Cancel"), "{editor}");
 
     let reader = scenario(TickKind::Reader, &[], &[]);
     let minimum = reader.minimum();
@@ -939,7 +906,7 @@ async fn a_lone_quote_card_widens_to_show_every_session_figure() {
 async fn quote_cards_move_by_row_down_and_by_card_across() {
     let quote = scenario(TickKind::Quote, &[], &[]);
     // Two cards across and one row of them at a time.
-    let (columns, rows) = (62, 10);
+    let (columns, rows) = (62, 6);
     let start = text(&render_keys(&quote, columns, rows, Vec::new()).await);
     assert!(start.contains("1–2/5"), "{start}");
     assert!(
@@ -962,20 +929,59 @@ async fn quote_cards_move_by_row_down_and_by_card_across() {
     assert!(last.contains("9988.HK"), "{last}");
 }
 
+/// What is wrong with the Tick's frame around `cells`: an edge or corner missing, so content
+/// shows outside it, a title cut short, or a row of its own for the data state.
+fn frame_problem(cells: &[Vec<String>]) -> Option<String> {
+    let (last_row, last_column) = (cells.len() - 1, cells[0].len() - 1);
+    let corners = [
+        (0, 0, "┌"),
+        (0, last_column, "┐"),
+        (last_row, 0, "└"),
+        (last_row, last_column, "┘"),
+    ];
+    if let Some((y, x, corner)) = corners
+        .into_iter()
+        .find(|(y, x, corner)| cells[*y][*x] != *corner)
+    {
+        return Some(format!("has no {corner} at {x},{y}"));
+    }
+    if let Some(y) = (1..last_row).find(|y| cells[*y][0] != "│" || cells[*y][last_column] != "│")
+    {
+        return Some(format!("has no side edge on row {y}"));
+    }
+    if row(cells, 0).contains('…') {
+        return Some("cuts its title short".into());
+    }
+    cells
+        .iter()
+        .any(|line| line.concat().contains("Data received"))
+        .then(|| "gives the data state a row".into())
+}
+
 fn row(cells: &[Vec<String>], row: usize) -> String {
     cells[row].concat()
 }
 
-/// Asserts the visible rows of `narrow` are the columns of `canvas` starting at `offset`.
+/// The scroll indicator: the bottom row inside the frame.
+fn indicator(cells: &[Vec<String>]) -> String {
+    let row = &cells[cells.len() - 2];
+    row[1..row.len() - 1].concat()
+}
+
+/// Asserts the visible rows of `narrow` are the columns of `canvas` starting at `offset`, both
+/// inside their frames; the last row inside `narrow`'s frame is its scroll indicator.
 fn assert_slice(narrow: &[Vec<String>], canvas: &[Vec<String>], offset: usize, label: &str) {
-    let columns = narrow[0].len();
-    let visible = &narrow[..narrow.len() - 1];
-    let slice: Vec<Vec<String>> = canvas
+    let columns = narrow[0].len() - 2;
+    let visible: Vec<Vec<String>> = narrow[1..narrow.len() - 2]
         .iter()
-        .map(|row| row[offset..offset + columns].to_vec())
+        .map(|row| row[1..=columns].to_vec())
+        .collect();
+    let slice: Vec<Vec<String>> = canvas[1..canvas.len() - 1]
+        .iter()
+        .map(|row| row[1 + offset..1 + offset + columns].to_vec())
         .collect();
     assert_eq!(
-        layout_of(visible),
+        layout_of(&visible),
         layout_of(&slice),
         "{label}: the Panel is not the canvas from column {offset}"
     );
@@ -990,19 +996,20 @@ async fn a_panel_narrower_than_the_minimum_scrolls_over_the_minimum_layout() {
         let largest = usize::from(minimum - columns);
         let start = render(&watchlist, columns, ROWS).await;
         assert_slice(&start, &canvas, 0, "before scrolling");
-        let indicator = row(&start, usize::from(ROWS) - 1);
+        let indicator = indicator(&start);
         assert!(indicator.starts_with('━'), "{indicator}");
         assert!(
-            indicator.trim_end().ends_with("─ < > scroll"),
+            // The word gives way first inside the narrowest frame.
+            indicator.trim_end().contains("─ < >"),
             "{indicator}"
         );
 
         let right = vec![KeyCode::Char('>'); 2];
         let scrolled = render_keys(&watchlist, columns, ROWS, right).await;
         assert_slice(&scrolled, &canvas, largest, "after two >");
-        let indicator = row(&scrolled, usize::from(ROWS) - 1);
+        let indicator = self::indicator(&scrolled);
         assert!(indicator.starts_with('─'), "{indicator}");
-        assert!(indicator.contains("━ < > scroll"), "{indicator}");
+        assert!(indicator.contains("━ < >"), "{indicator}");
 
         let there_and_back = ['>', '>', '<', '<'].map(KeyCode::Char).to_vec();
         let back = render_keys(&watchlist, columns, ROWS, there_and_back).await;
@@ -1015,18 +1022,15 @@ async fn the_viewport_reveals_the_kline_cursor_and_keeps_a_manual_scroll() {
     let kline = scenario(TickKind::Kline, &[], &[]);
     // The cursor sits on the newest candle, past the right edge of this Panel.
     let columns = BELOW_MINIMUM[1];
-    let start = text(&render(&kline, columns, ROWS).await);
-    assert!(start.contains('▲'), "{start}");
-    let indicator = start.lines().last().unwrap();
-    assert!(indicator.starts_with('─'), "{indicator}");
+    let start = render(&kline, columns, ROWS).await;
+    assert!(text(&start).contains('▲'), "{}", text(&start));
+    assert!(indicator(&start).starts_with('─'), "{}", text(&start));
 
-    let scrolled = text(&render_keys(&kline, columns, ROWS, vec![KeyCode::Char('<'); 2]).await);
-    assert!(!scrolled.contains('▲'), "{scrolled}");
-    assert!(scrolled.contains("700.HK · day"), "{scrolled}");
-    assert!(
-        scrolled.lines().last().unwrap().starts_with('━'),
-        "{scrolled}"
-    );
+    let scrolled = render_keys(&kline, columns, ROWS, vec![KeyCode::Char('<'); 2]).await;
+    let scrolled_text = text(&scrolled);
+    assert!(!scrolled_text.contains('▲'), "{scrolled_text}");
+    assert!(scrolled_text.contains("2026-"), "{scrolled_text}");
+    assert!(indicator(&scrolled).starts_with('━'), "{scrolled_text}");
 }
 
 #[tokio::test(start_paused = true)]
@@ -1036,12 +1040,12 @@ async fn a_panel_shorter_than_the_minimum_scrolls_vertically_and_follows_the_sel
     let rows = minimum.rows - 4;
     let start = text(&render(&earnings, minimum.columns, rows).await);
     assert!(start.contains("↕ 1–"), "{start}");
-    assert!(start.contains(">Q2 2026"), "{start}");
+    assert!(start.contains("Q2 2026"), "{start}");
     assert!(!start.contains("Q3 2024"), "{start}");
 
     let down = vec![KeyCode::Char('j'); 7];
     let followed = text(&render_keys(&earnings, minimum.columns, rows, down.clone()).await);
-    assert!(followed.contains(">Q3 2024"), "{followed}");
+    assert!(followed.contains("Q3 2024"), "{followed}");
     assert!(!followed.contains("↕ 1–"), "{followed}");
 
     let manual = [down, vec![KeyCode::Char('{'); 4]].concat();
@@ -1207,5 +1211,36 @@ async fn a_card_the_user_only_looks_at_still_answers_keys() {
         press(KeyCode::Enter),
     ];
     let frame = text(&render_events(&news, MONITOR_CARD_COLUMNS, LAPTOP.1, opened).await);
-    assert!(frame.contains("News article"), "{frame}");
+    assert!(frame.contains("示例资讯正文"), "{frame}");
+}
+
+/// Entering a card shows its keys where the card kept room for them, so nothing it shows moves.
+#[tokio::test(start_paused = true)]
+async fn entering_a_card_moves_none_of_its_content() {
+    let mut failures = Vec::new();
+    let scenarios = every_tick_at_the_minimum_width()
+        .into_iter()
+        .filter(|scenario| !scenario.keys.contains(&KeyCode::Char('?')));
+    for scenario in scenarios {
+        let (columns, rows) = (MONITOR_CARD_COLUMNS, LAPTOP.1);
+        let operable = render(&scenario, columns, rows).await;
+        let read_only = render_events(&scenario, columns, rows, looked_at(&scenario)).await;
+        let row_of = |cells: &[Vec<String>], field: &str| {
+            cells.iter().position(|line| line.concat().contains(field))
+        };
+        let fields = scenario
+            .shows
+            .iter()
+            .filter(|field| !KEY_HINTS.iter().any(|hint| field.contains(hint)));
+        for field in fields {
+            let (entered, looked) = (row_of(&operable, field), row_of(&read_only, field));
+            if entered != looked {
+                failures.push(format!(
+                    "{} moves {field:?} from row {looked:?} to {entered:?}",
+                    scenario.label(columns, rows)
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

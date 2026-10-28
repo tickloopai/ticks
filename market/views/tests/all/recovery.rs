@@ -127,7 +127,7 @@ async fn news_network_failure_keeps_the_view_alive_and_next_refresh_publishes_re
         } else {
             assert_eq!(*api.calls.lock().unwrap(), 3);
             assert!(screen.contains("Recovered headline"));
-            assert!(screen.contains("Data received"));
+            assert!(shows_data(&screen), "{screen}");
             assert_eq!(records.len(), 2);
             assert_eq!(
                 records[1]["data"]["items"][0]["title"],
@@ -348,11 +348,11 @@ async fn market_failure_recovers_on_connection_or_data_without_status_ticks() {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(screen.contains(if expects_recovery {
-            "Data received"
+        if expects_recovery {
+            assert!(shows_data(&screen), "{screen}");
         } else {
-            "Unavailable"
-        }));
+            assert!(screen.contains("Unavailable"), "{screen}");
+        }
         assert_eq!(*api.unsubscribed.lock().unwrap(), 1);
         drop(push);
     }
@@ -556,7 +556,7 @@ async fn connection_recovery_backfills_candles_and_healthy_probes_do_not_repeat_
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(screen.contains("Data received"));
+        assert!(shows_data(&screen), "{screen}");
         drop(push);
     }
 }
@@ -638,7 +638,7 @@ async fn article_network_failure_keeps_the_list_and_enter_can_retry_without_ui_t
         if retry {
             assert_eq!(*api.article_calls.lock().unwrap(), 2);
             assert!(screen.contains("Recovered article body"));
-            assert!(screen.contains("Data received"));
+            assert!(shows_data(&screen), "{screen}");
             assert_eq!(records.len(), 2);
             assert_eq!(
                 records[1]["data"]["articles"]["1"]["body"],
@@ -681,4 +681,12 @@ async fn article_authentication_and_usage_errors_remain_fatal() {
         assert_eq!(*api.article_calls.lock().unwrap(), 1);
         assert_eq!(records(events).len(), 1);
     }
+}
+
+/// Whether the frame tells of data arriving: its mark alone, with no problem on its bottom edge.
+fn shows_data(screen: &str) -> bool {
+    screen.contains('●')
+        && !["Unavailable", "Disconnected", "Recovering"]
+            .iter()
+            .any(|problem| screen.contains(problem))
 }

@@ -594,7 +594,7 @@ async fn resizing_recomputes_visible_candles_without_losing_selection_or_emittin
     for (width, buffer) in samples {
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         if width == 20 {
-            assert!(text.contains("━") && text.contains("↕ 1–7/14"), "{text}");
+            assert!(text.contains("━") && text.contains("↕ 1–5/12"), "{text}");
         } else {
             assert!(text.contains("C 179"), "selection survives resize: {text}");
             plotted.push(
@@ -1079,12 +1079,22 @@ fn draw_marked(view: &kline::KlineView, columns: u16, rows: u16) -> ratatui::buf
         ..Settings::default()
     };
     let mut terminal =
-        ratatui::Terminal::new(ratatui::backend::TestBackend::new(columns, rows)).unwrap();
+        ratatui::Terminal::new(ratatui::backend::TestBackend::new(columns - 2, rows - 2)).unwrap();
     let mut state = ViewState::default();
     terminal
         .draw(|frame| view.draw(frame, &mut state, &settings))
         .unwrap();
-    terminal.backend().buffer().clone()
+    in_frame(terminal.backend().buffer(), columns, rows)
+}
+
+/// `content` where the Tick's frame `columns` by `rows` shows it, a row and a column in.
+fn in_frame(content: &ratatui::buffer::Buffer, columns: u16, rows: u16) -> ratatui::buffer::Buffer {
+    let mut framed =
+        ratatui::buffer::Buffer::empty(ratatui::layout::Rect::new(0, 0, columns, rows));
+    for position in content.area.positions() {
+        framed[(position.x + 1, position.y + 1)] = content[position].clone();
+    }
+    framed
 }
 
 fn row_text(buffer: &ratatui::buffer::Buffer, row: u16) -> String {
@@ -1151,4 +1161,32 @@ async fn marks_stay_inside_the_plot_at_every_panel_size() {
             );
         }
     }
+}
+
+/// Left and right select the candle; up and down are left to the host, which moves between cards.
+#[tokio::test]
+async fn only_left_and_right_move_the_selected_candle() {
+    use crossterm::event::KeyCode;
+    use tick_market::runtime::{LiveView, NoMarketApi, ViewState};
+    let mut view = marked_view().await;
+    let mut state = ViewState::default();
+    let api = NoMarketApi;
+    let start = draw_marked(&view, 60, 20);
+    for key in [
+        KeyCode::Up,
+        KeyCode::Down,
+        KeyCode::Char('k'),
+        KeyCode::Char('j'),
+    ] {
+        view.on_key(key, &api, &mut state).await.unwrap();
+        assert_eq!(
+            draw_marked(&view, 60, 20),
+            start,
+            "{key:?} moved the candle"
+        );
+    }
+    view.on_key(KeyCode::Left, &api, &mut state).await.unwrap();
+    assert_ne!(draw_marked(&view, 60, 20), start);
+    view.on_key(KeyCode::Right, &api, &mut state).await.unwrap();
+    assert_eq!(draw_marked(&view, 60, 20), start);
 }

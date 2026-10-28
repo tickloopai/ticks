@@ -234,7 +234,10 @@ fn visible_kline_keyboard_and_tool_share_the_same_stdio_instance() {
     };
     assert_eq!(describe["result"]["protocol"], 3);
     assert_eq!(describe["result"]["kind"], "kline");
-    assert_eq!(describe["result"]["screen"], json!({"min_rows": 14}));
+    assert_eq!(
+        describe["result"]["screen"],
+        json!({"min_rows": 14, "max_rows": 30})
+    );
     assert!(
         describe["result"]["tools"]
             .as_array()

@@ -234,7 +234,7 @@ async fn quote_scrolls_a_small_panel_without_losing_content() {
         .collect();
     assert!(screen.contains("TSLA.US"), "{screen}");
     assert!(
-        screen.contains("━━─") && screen.contains("─ ↕ 1–3/6"),
+        screen.contains("━━─") && screen.contains("─ ↕ 1–1/4"),
         "{screen}"
     );
     let record: serde_json::Value = updates.records().all().remove(0);

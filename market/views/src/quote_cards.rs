@@ -61,7 +61,8 @@ impl CardGrid {
         true
     }
 
-    /// Draws `title` and a card for each quote, `markers` giving each card's symbol a prefix.
+    /// Draws a card for each quote, `markers` giving each card's symbol a prefix, and gives the
+    /// frame `title` with which cards show when not all fit.
     pub fn draw(
         &self,
         frame: &mut ratatui::Frame<'_>,
@@ -75,15 +76,7 @@ impl CardGrid {
         let styles = settings.styles();
         frame.buffer_mut().set_style(area, styles.panel_base());
         let inner = crate::runtime::table_content_area(area);
-        write_text(
-            frame.buffer_mut(),
-            inner.x,
-            area.y,
-            title,
-            inner.width as usize,
-            settings.ambiguous_width,
-            styles.panel_base().patch(styles.title),
-        );
+        state.title = title.to_owned();
         if quotes.is_empty() {
             write_text(
                 frame.buffer_mut(),
@@ -114,17 +107,11 @@ impl CardGrid {
             let first = state.offset * per_row + 1;
             let last = ((state.offset + visible_rows) * per_row).min(quotes.len());
             let range = format!("{first}–{last}/{}", quotes.len());
-            write_text(
-                frame.buffer_mut(),
-                inner
-                    .right()
-                    .saturating_sub(width(&range, settings.ambiguous_width) as u16),
-                area.y,
-                &range,
-                inner.width as usize,
-                settings.ambiguous_width,
-                styles.panel_base().patch(styles.muted_text),
-            );
+            state.title = [title, &range]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ");
         }
         let cells = crate::commands::quote::table(quotes).display_rows(settings);
         for (index, (quote, cells)) in quotes.iter().zip(&cells).enumerate() {

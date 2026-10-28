@@ -2,13 +2,7 @@ use std::{cell::Cell, collections::BTreeMap, io::Write, time::Duration};
 
 use crossterm::event::{Event, KeyCode};
 use futures_util::Stream;
-use ratatui::{
-    Frame, Terminal,
-    backend::Backend,
-    layout::Rect,
-    style::Style,
-    widgets::{Block, Borders},
-};
+use ratatui::{Frame, Terminal, backend::Backend, layout::Rect, style::Style};
 use serde_json::json;
 use tickloop_ui::{
     format::{pad, width, write_text},
@@ -114,16 +108,17 @@ impl<'a> NewsView<'a> {
             .unwrap_or(0)
     }
 
-    fn draw_article(&self, frame: &mut Frame<'_>, article: &NewsArticle, settings: &Settings) {
-        let area = frame.area();
+    fn draw_article(
+        &self,
+        frame: &mut Frame<'_>,
+        article: &NewsArticle,
+        state: &mut ViewState,
+        settings: &Settings,
+    ) {
+        let inner = frame.area();
         let styles = settings.styles();
-        let block = Block::default()
-            .title(" News article ")
-            .borders(Borders::ALL)
-            .style(styles.panel_base())
-            .border_style(styles.border);
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
+        frame.buffer_mut().set_style(inner, styles.panel_base());
+        state.title = self.title();
         let markdown = format!(
             "# {}\n\n{}\n\n[Original article]({})",
             article.title, article.body, article.url
@@ -134,9 +129,7 @@ impl<'a> NewsView<'a> {
             settings.ambiguous_width,
             &styles,
         );
-        let visible = inner
-            .height
-            .saturating_sub(crate::runtime::key_hint_rows(settings)) as usize;
+        let visible = inner.height.saturating_sub(crate::runtime::KEY_LINE_ROWS) as usize;
         self.page_size.set(visible.max(1));
         let offset = self
             .detail_scroll
@@ -178,10 +171,10 @@ impl LiveView for NewsView<'_> {
         crate::metadata::TickKind::News
     }
     fn title(&self) -> String {
-        self.args.symbol.as_deref().map_or_else(
-            || "News · Market".into(),
-            |symbol| format!("News · {}", normalize_symbol(symbol)),
-        )
+        self.args
+            .symbol
+            .as_deref()
+            .map_or_else(|| "Market".into(), normalize_symbol)
     }
     fn table(&self) -> TableData {
         table(&self.items)
@@ -277,17 +270,13 @@ impl LiveView for NewsView<'_> {
             .as_ref()
             .and_then(|id| self.articles.get(id))
         {
-            self.draw_article(frame, article, settings);
+            self.draw_article(frame, article, state, settings);
             return;
         }
         let styles = settings.styles();
-        let block = Block::default()
-            .title(format!(" {} ", self.title()))
-            .borders(Borders::ALL)
-            .style(styles.panel_base())
-            .border_style(styles.border);
-        let inner = block.inner(frame.area());
-        frame.render_widget(block, frame.area());
+        let inner = frame.area();
+        frame.buffer_mut().set_style(inner, styles.panel_base());
+        state.title = self.title();
         if inner.width == 0 || inner.height < 2 {
             return;
         }
@@ -306,8 +295,7 @@ impl LiveView for NewsView<'_> {
         // The header row, and the key line when the screen shows one.
         let visible = inner
             .height
-            .saturating_sub(1 + crate::runtime::key_hint_rows(settings))
-            as usize;
+            .saturating_sub(1 + crate::runtime::KEY_LINE_ROWS) as usize;
         self.page_size.set(visible.max(1));
         state.selected = self.selected_index();
         state.offset = state.offset.min(self.items.len().saturating_sub(visible));

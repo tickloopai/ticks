@@ -554,3 +554,105 @@ async fn a_whitespace_only_visible_section_cannot_create_a_blank_chat_citation()
         .collect::<String>();
     assert!(visible.contains("No nonempty original paragraph"));
 }
+
+/// A terminal that records which cells each frame writes.
+struct RecordingBackend {
+    inner: TestBackend,
+    written: Vec<(u16, u16, String)>,
+}
+
+impl tick_market::viewport::KeyBubbling for RecordingBackend {}
+
+impl ratatui::backend::Backend for RecordingBackend {
+    type Error = <TestBackend as ratatui::backend::Backend>::Error;
+
+    fn draw<'a, I>(&mut self, content: I) -> std::result::Result<(), Self::Error>
+    where
+        I: Iterator<Item = (u16, u16, &'a ratatui::buffer::Cell)>,
+    {
+        let content: Vec<_> = content.collect();
+        self.written.extend(
+            content
+                .iter()
+                .map(|(x, y, cell)| (*x, *y, cell.symbol().to_owned())),
+        );
+        self.inner.draw(content.into_iter())
+    }
+    fn hide_cursor(&mut self) -> std::result::Result<(), Self::Error> {
+        self.inner.hide_cursor()
+    }
+    fn show_cursor(&mut self) -> std::result::Result<(), Self::Error> {
+        self.inner.show_cursor()
+    }
+    fn get_cursor_position(
+        &mut self,
+    ) -> std::result::Result<ratatui::layout::Position, Self::Error> {
+        self.inner.get_cursor_position()
+    }
+    fn set_cursor_position<P: Into<ratatui::layout::Position>>(
+        &mut self,
+        position: P,
+    ) -> std::result::Result<(), Self::Error> {
+        self.inner.set_cursor_position(position)
+    }
+    fn clear(&mut self) -> std::result::Result<(), Self::Error> {
+        self.inner.clear()
+    }
+    fn clear_region(
+        &mut self,
+        clear_type: ratatui::backend::ClearType,
+    ) -> std::result::Result<(), Self::Error> {
+        self.inner.clear_region(clear_type)
+    }
+    fn size(&self) -> std::result::Result<ratatui::layout::Size, Self::Error> {
+        self.inner.size()
+    }
+    fn window_size(&mut self) -> std::result::Result<ratatui::backend::WindowSize, Self::Error> {
+        self.inner.window_size()
+    }
+    fn flush(&mut self) -> std::result::Result<(), Self::Error> {
+        self.inner.flush()
+    }
+}
+
+/// A web original shows on one line, cut to the Panel, as a link the terminal opens to the whole
+/// address; the cells the link spans are its own, so nothing is written over them.
+#[tokio::test]
+async fn a_web_original_is_one_line_the_terminal_opens() {
+    const PAGE: &str = "https://finance.yahoo.com/markets/stocks/article/tesla-stock-jumps-as-barclays-bets-152118597.html";
+    let document = Document::from_text(PAGE, "Tesla stock jumps", "# Tesla\n\nShares rose.");
+    let library = Arc::new(RwLock::new(vec![document]));
+    let (keys, input) = tokio::sync::mpsc::unbounded_channel();
+    keys.send(Ok(Event::Key(KeyEvent::new(
+        KeyCode::Char('q'),
+        KeyModifiers::NONE,
+    ))))
+    .unwrap();
+    let mut terminal = Terminal::new(RecordingBackend {
+        inner: TestBackend::new(40, 12),
+        written: Vec::new(),
+    })
+    .unwrap();
+    run_live(
+        library,
+        &Settings::default(),
+        &mut terminal,
+        tokio_stream::wrappers::UnboundedReceiverStream::new(input),
+        &mut TickStream::in_memory(TickKind::Reader),
+    )
+    .await
+    .unwrap();
+    let written = &terminal.backend().written;
+    let shown = "↗ finance.yahoo.com/markets/stocks/ar…";
+    let link = tickloop_ui::hyperlink::linked(PAGE, shown);
+    let (x, y, _) = written
+        .iter()
+        .find(|(_, _, symbol)| *symbol == link)
+        .unwrap_or_else(|| panic!("no link to the page among {written:?}"));
+    let covered = *x + 1..*x + shown.chars().count() as u16;
+    let over = written
+        .iter()
+        .filter(|(column, row, _)| row == y && covered.contains(column))
+        .collect::<Vec<_>>();
+    assert!(over.is_empty(), "written over the link: {over:?}");
+}

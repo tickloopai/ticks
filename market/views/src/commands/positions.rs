@@ -155,7 +155,7 @@ impl LiveView for PositionsView {
     }
 
     fn title(&self) -> String {
-        format!("Positions · {}", self.account_mode.label(self.language))
+        self.account_mode.label(self.language).to_owned()
     }
 
     fn table(&self) -> TableData {
@@ -232,6 +232,7 @@ impl LiveView for PositionsView {
     ) {
         crate::runtime::draw_table(
             frame,
+            frame.area(),
             &self.title(),
             &self.table(),
             self.priority(),

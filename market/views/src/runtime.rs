@@ -28,11 +28,20 @@ use tickloop_ui::{
 
 const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
 const WIDE_PANEL_COLUMNS: u16 = 64;
-const TALL_PANEL_ROWS: u16 = 10;
 const HELP_TITLE: &str = " Keys · ? / Esc / Backspace close ";
 const NARROW_HELP_TITLE: &str = " Keys · ? close ";
 /// Under a help overlay too short for every key.
 const HELP_SCROLL_HINT: &str = " j/k more ";
+/// The Tick's frame takes a row above and below its view and a column either side.
+pub const FRAME_WIDTH: u16 = 1;
+/// The corners, a dash before the data mark, and the mark with a space either side.
+const TITLE_MARGIN: usize = 8;
+/// The narrowest frame that still carries a title and the data mark.
+const MINIMUM_FRAME_COLUMNS: u16 = 10;
+/// The data state on the frame's top edge: data arriving, or, in the error style, not.
+const DATA_MARK: &str = "●";
+/// The data state while the Tick recovers its connection.
+const RECOVERING_MARK: &str = "◌";
 pub const CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 pub const REFRESH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 /// A Tick Tool call runs beside the view, so both the number in flight and how
@@ -103,6 +112,9 @@ pub struct ViewState {
     pub help: bool,
     /// How many lines of the help overlay are scrolled past; a short Panel scrolls its keys.
     pub help_offset: u16,
+    /// The title the view gives this frame, shown on the top edge of the Tick's frame; views
+    /// set it while they draw.
+    pub title: String,
     /// Whether the user is in the Tick's card, where its keys are worth showing: a card the user
     /// only looks at shows no key hints, though the Tick still answers every key it receives.
     pub focused: bool,
@@ -121,6 +133,7 @@ impl Default for ViewState {
             offset: 0,
             help: false,
             help_offset: 0,
+            title: String::new(),
             focused: !in_instance() || crate::terminal::has_focus(),
             connection: ConnectionState::Connected,
             last_error: None,
@@ -220,6 +233,7 @@ pub trait LiveView: Send {
     fn draw(&self, frame: &mut Frame<'_>, state: &mut ViewState, settings: &Settings) {
         draw_table(
             frame,
+            frame.area(),
             &self.title(),
             &self.table(),
             self.priority(),
@@ -724,8 +738,9 @@ async fn handle_key<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Ev
     Ok(KeyOutcome::Handled)
 }
 
-/// The whole screen of `size` the view shows now, with its cursor: the view and its status row,
-/// scrolled over the canvas of the Tick's minimum when the screen is smaller, and the help overlay.
+/// The whole screen of `size` the view shows now, with its cursor: the view inside a frame that
+/// carries its title and data state above and its keys and errors below, scrolled over the
+/// canvas of the Tick's minimum when the frame is smaller, and the help overlay.
 fn compose<V: LiveView>(
     view: &V,
     size: Size,
@@ -741,42 +756,65 @@ fn compose<V: LiveView>(
         key_hints: settings.key_hints && state.focused,
         ..settings.clone()
     };
+    let content = Rect::new(
+        FRAME_WIDTH,
+        FRAME_WIDTH,
+        size.width.saturating_sub(FRAME_WIDTH * 2),
+        size.height.saturating_sub(FRAME_WIDTH * 2),
+    );
     let minimum = view.minimum_panel_size();
     viewport.set_layout(ViewportLayout::of(
-        Rect::new(0, 0, size.width, size.height),
-        Size::new(minimum.columns, minimum.rows),
+        content,
+        Size::new(
+            minimum.columns.saturating_sub(FRAME_WIDTH * 2),
+            minimum.rows.saturating_sub(FRAME_WIDTH * 2),
+        ),
     ));
-    let canvas = match viewport.layout() {
-        Some(layout) => {
-            // ratatui hands out a Frame only through a Terminal, so the canvas is an in-memory one.
-            let Ok(mut canvas) = Terminal::new(CanvasBackend::new(layout.canvas));
-            let Ok(_) = canvas.draw(|frame| draw_canvas(view, frame, state, settings));
-            let backend = canvas.backend();
-            let cursor = backend.cursor();
-            viewport.follow(
-                cursor.map(|cursor| cursor.x).or(state.focus_column),
-                cursor.map(|cursor| cursor.y).or(state.focus_row),
-            );
-            Some((backend.buffer().clone(), cursor))
-        }
-        None => None,
-    };
+    let layout = viewport.layout();
+    // ratatui hands out a Frame only through a Terminal, so the view draws into an in-memory one.
+    let Ok(mut canvas) = Terminal::new(CanvasBackend::new(
+        layout.map_or(content.as_size(), |layout| layout.canvas),
+    ));
+    // The frame's own buffer, not what the backend was sent: a link's row is one cell that spans
+    // the cells after it, which the diff skips and only the frame keeps marked.
+    let mut drawn = Buffer::empty(Rect::default());
+    let Ok(_) = canvas.draw(|frame| {
+        draw_view(view, frame, state, settings);
+        drawn = frame.buffer_mut().clone();
+    });
+    let drawn_cursor = canvas.backend().cursor();
+    if layout.is_some() {
+        viewport.follow(
+            drawn_cursor.map(|cursor| cursor.x).or(state.focus_column),
+            drawn_cursor.map(|cursor| cursor.y).or(state.focus_row),
+        );
+    }
+    let mut composed = Buffer::empty(Rect::default());
     let Ok(mut screen) = Terminal::new(CanvasBackend::new(size));
     let Ok(_) = screen.draw(|frame| {
         let styles = settings.styles();
-        match &canvas {
-            None => draw_canvas(view, frame, state, settings),
-            Some((buffer, cursor)) => {
-                let area = frame.area();
-                frame.buffer_mut().set_style(area, styles.canvas);
-                viewport.render(buffer, frame.buffer_mut(), styles, settings.ambiguous_width);
-                if let Some(cursor) = cursor.and_then(|cursor| viewport.on_panel(cursor)) {
-                    frame.set_cursor_position(cursor);
+        let area = frame.area();
+        frame.buffer_mut().set_style(area, styles.canvas);
+        if layout.is_some() {
+            viewport.render(&drawn, frame.buffer_mut(), styles, settings.ambiguous_width);
+            if let Some(cursor) = drawn_cursor.and_then(|cursor| viewport.on_panel(cursor)) {
+                frame.set_cursor_position(cursor);
+            }
+        } else {
+            for position in drawn.area.positions() {
+                let target = Position::new(position.x + content.x, position.y + content.y);
+                if content.contains(target) {
+                    frame.buffer_mut()[target] = drawn[position].clone();
                 }
             }
+            if let Some(cursor) = drawn_cursor {
+                frame
+                    .set_cursor_position(Position::new(cursor.x + content.x, cursor.y + content.y));
+            }
         }
+        draw_frame(view, frame, state, settings);
         if state.help {
-            let area = frame.area();
+            let area = content;
             let mut keys = view.help().to_owned();
             if quits_on_keys() {
                 keys = format!("{QUIT_HELP}\n{keys}");
@@ -802,11 +840,11 @@ fn compose<V: LiveView>(
             let width = (area.width * 3 / 4).max(
                 u16::try_from(help.line_width())
                     .unwrap_or(u16::MAX)
-                    .min(area.width.saturating_sub(2)),
+                    .min(area.width),
             );
             let lines = u16::try_from(help.line_count(width)).unwrap_or(u16::MAX);
-            // A short Panel gives the overlay every row above the status row and scrolls the keys.
-            let height = (area.height * 3 / 4).max(lines.min(area.height.saturating_sub(1)));
+            // A short Panel gives the overlay every row inside the frame and scrolls the keys.
+            let height = (area.height * 3 / 4).max(lines.min(area.height));
             let hidden = lines.saturating_sub(height);
             state.help_offset = state.help_offset.min(hidden);
             let help = if hidden == 0 {
@@ -825,47 +863,80 @@ fn compose<V: LiveView>(
             frame.buffer_mut().set_style(popup, styles.overlay_base());
             frame.render_widget(help, popup);
         }
+        composed = frame.buffer_mut().clone();
     });
-    (screen.backend().buffer().clone(), screen.backend().cursor())
+    (composed, screen.backend().cursor())
 }
 
-/// Draws the view and the status row into the frame, which is the Panel itself or, for a Panel
-/// smaller than the Tick's minimum, the canvas it scrolls over.
-fn draw_canvas<V: LiveView>(
+/// How wide a title the Tick's frame shows whole around a view `content_columns` wide.
+pub fn frame_title_columns(content_columns: u16) -> usize {
+    usize::from(content_columns + FRAME_WIDTH * 2).saturating_sub(TITLE_MARGIN)
+}
+
+/// Draws the view into the frame, which is the inside of the Tick's frame or, for one smaller than
+/// the Tick's minimum, the canvas it scrolls over.
+fn draw_view<V: LiveView>(
     view: &V,
     frame: &mut Frame<'_>,
     state: &mut ViewState,
     settings: &Settings,
 ) {
     let area = frame.area();
-    let styles = settings.styles();
-    frame.buffer_mut().set_style(area, styles.canvas);
+    frame.buffer_mut().set_style(area, settings.styles().canvas);
     state.focus_column = None;
     state.focus_row = None;
+    state.title.clear();
     view.draw(frame, state, settings);
-    let horizontal_padding = if area.width >= WIDE_PANEL_COLUMNS {
-        2
-    } else {
-        1
-    };
-    let status_area = Rect::new(area.x, area.bottom() - 1, area.width, 1);
-    let mut status_style = styles.status_base().patch(styles.muted_text);
-    if state.last_error.is_some() {
-        status_style = status_style.patch(styles.error);
+}
+
+/// The Tick's frame around the whole screen: the view's title on the left of the top edge and a
+/// one-column mark of its data state on the right, its keys on the right of the bottom edge and
+/// the last error on the left, so neither takes a row of its own.
+fn draw_frame<V: LiveView>(
+    view: &V,
+    frame: &mut Frame<'_>,
+    state: &ViewState,
+    settings: &Settings,
+) {
+    let area = frame.area();
+    let styles = settings.styles();
+    let edge = styles.panel_base().patch(styles.border);
+    frame.render_widget(
+        Block::default().borders(Borders::ALL).border_style(edge),
+        area,
+    );
+    if area.width < MINIMUM_FRAME_COLUMNS || area.height < 2 {
+        return;
     }
-    frame
-        .buffer_mut()
-        .set_style(status_area, styles.status_base());
-    let icon = tickloop_ui::icons::Icon::Connection.glyph();
-    let status = if let Some(error) = &state.last_error {
-        if state.connection == ConnectionState::Connected {
-            error.clone()
-        } else {
-            format!("{icon} {} · {error}", state.availability())
-        }
-    } else {
-        format!("{icon} {}", state.availability())
+    let (mark, mark_style) = match state.connection {
+        ConnectionState::Connected => (DATA_MARK, styles.title),
+        ConnectionState::Reconnecting => (RECOVERING_MARK, styles.muted_text),
+        ConnectionState::Disconnected => (DATA_MARK, styles.error),
     };
+    write_text(
+        frame.buffer_mut(),
+        area.right() - 4,
+        area.y,
+        &format!(" {mark} "),
+        3,
+        settings.ambiguous_width,
+        edge.patch(mark_style),
+    );
+    // The corners, a dash and the spaced mark leave the rest of the top edge to the title.
+    let title_columns = usize::from(area.width).saturating_sub(TITLE_MARGIN);
+    let title =
+        tickloop_ui::format::truncate(&state.title, title_columns, settings.ambiguous_width);
+    if !title.is_empty() {
+        write_text(
+            frame.buffer_mut(),
+            area.x + 1,
+            area.y,
+            &format!(" {title} "),
+            title_columns + 2,
+            settings.ambiguous_width,
+            edge,
+        );
+    }
     let keys = if !settings.key_hints {
         ""
     } else if view.captures_text() && area.width >= 40 {
@@ -879,35 +950,45 @@ fn draw_canvas<V: LiveView>(
     } else {
         "?  q Quit"
     };
-    let keys_width = width(keys, settings.ambiguous_width) as u16;
+    let keys = if keys.is_empty() {
+        String::new()
+    } else {
+        format!(" {keys} ")
+    };
+    let keys_width = width(&keys, settings.ambiguous_width) as u16;
+    let bottom = area.bottom() - 1;
     write_text(
         frame.buffer_mut(),
-        area.x,
-        area.bottom() - 1,
-        &" ".repeat(area.width as usize),
-        area.width as usize,
+        area.right().saturating_sub(2 + keys_width),
+        bottom,
+        &keys,
+        usize::from(keys_width),
         settings.ambiguous_width,
-        styles.status_base(),
+        edge.patch(styles.muted_text),
     );
-    write_text(
-        frame.buffer_mut(),
-        area.x + horizontal_padding,
-        area.bottom() - 1,
-        &status,
-        area.width
-            .saturating_sub(horizontal_padding * 2 + keys_width + 2) as usize,
-        settings.ambiguous_width,
-        status_style,
-    );
-    write_text(
-        frame.buffer_mut(),
-        area.right() - horizontal_padding - keys_width,
-        area.bottom() - 1,
-        keys,
-        keys_width as usize,
-        settings.ambiguous_width,
-        styles.status_base().patch(styles.muted_text),
-    );
+    let problem = match (&state.last_error, state.connection) {
+        (Some(error), ConnectionState::Connected) => Some(error.clone()),
+        (Some(error), _) => Some(format!("{} · {error}", state.availability())),
+        (None, ConnectionState::Connected) => None,
+        (None, _) => Some(state.availability().to_owned()),
+    };
+    if let Some(problem) = problem {
+        let room = usize::from(area.width.saturating_sub(keys_width + 5));
+        let problem = tickloop_ui::format::truncate(&problem, room, settings.ambiguous_width);
+        write_text(
+            frame.buffer_mut(),
+            area.x + 1,
+            bottom,
+            &format!(" {problem} "),
+            room + 2,
+            settings.ambiguous_width,
+            edge.patch(if state.last_error.is_some() {
+                styles.error
+            } else {
+                styles.muted_text
+            }),
+        );
+    }
 }
 
 /// Why a Tick has no content from its data source yet.
@@ -980,11 +1061,15 @@ pub fn draw_connecting<B: Backend>(
         .draw(|frame| {
             let area = frame.area();
             frame.buffer_mut().set_style(area, styles.panel_base());
-            let inner = table_content_area(area);
+            // The same whole frame as a view's, with the status as its first line inside.
+            let edge = styles.panel_base().patch(styles.border);
+            let block = Block::default().borders(Borders::ALL).border_style(edge);
+            let inner = table_content_area(block.inner(area));
+            frame.render_widget(block, area);
             write_text(
                 frame.buffer_mut(),
                 inner.x,
-                area.y,
+                inner.y,
                 &status,
                 inner.width as usize,
                 settings.ambiguous_width,
@@ -995,25 +1080,16 @@ pub fn draw_connecting<B: Backend>(
                     Paragraph::new(detail)
                         .wrap(Wrap { trim: false })
                         .style(styles.panel_base().patch(detail_style)),
-                    inner,
+                    Rect {
+                        y: inner.y + 1,
+                        height: inner.height.saturating_sub(1),
+                        ..inner
+                    },
                 );
             }
         })
         .map_err(|error| Error::usage(error.to_string()))?;
     Ok(())
-}
-
-/// The status hint for the keys that quit a standalone Tick.
-pub const QUIT_HINT: &str = "q Quit";
-
-/// `hints` less a trailing [`QUIT_HINT`] when the keys do not quit the Tick.
-pub fn standalone_hints<'a, 'b>(
-    hints: &'a [tickloop_ui::format::Hint<'b>],
-) -> &'a [tickloop_ui::format::Hint<'b>] {
-    match hints.split_last() {
-        Some((last, rest)) if last.full == QUIT_HINT && !quits_on_keys() => rest,
-        _ => hints,
-    }
 }
 
 /// `hints` joined to fit `columns` as [`tickloop_ui::format::fit_hints`] joins them, or nothing
@@ -1030,74 +1106,58 @@ pub fn key_hints(
     tickloop_ui::format::fit_hints(hints, separator, columns, settings.ambiguous_width)
 }
 
-/// The rows a view keeps for its line of key hints: none on a screen that shows none.
-pub fn key_hint_rows(settings: &Settings) -> u16 {
-    u16::from(settings.key_hints)
-}
+/// The row a view keeps for its line of key hints whether or not the screen shows them, so
+/// entering or leaving the card does not move what the view shows.
+pub const KEY_LINE_ROWS: u16 = 1;
 
-/// The key line under a list of articles or posts; a narrow Panel drops the keys the status row
-/// already offers.
+/// The key line under a list of articles or posts; the frame offers Help and Quit.
 pub fn reading_list_keys(columns: usize, settings: &Settings) -> String {
     use tickloop_ui::format::Hint;
-    let hints = [
-        Hint::whole("Enter Read"),
-        Hint::whole("? Help"),
-        Hint::whole(QUIT_HINT),
-    ];
-    key_hints(standalone_hints(&hints), "  ·  ", columns, settings)
+    key_hints(&[Hint::whole("Enter Read")], "  ·  ", columns, settings)
 }
 
 /// The key line under an open article or post.
 pub fn reading_keys(columns: usize, settings: &Settings) -> String {
     use tickloop_ui::format::Hint;
-    let hints = [
-        Hint::whole("Backspace Back"),
-        Hint::whole("j/k Scroll"),
-        Hint::whole(QUIT_HINT),
-    ];
-    key_hints(standalone_hints(&hints), " · ", columns, settings)
-}
-
-pub fn table_content_area(area: Rect) -> Rect {
-    let horizontal_padding = if area.width >= WIDE_PANEL_COLUMNS {
-        2
-    } else {
-        1
-    };
-    let header_y = area.y + if area.height >= TALL_PANEL_ROWS { 2 } else { 1 };
-    Rect::new(
-        area.x + horizontal_padding,
-        header_y,
-        area.width.saturating_sub(horizontal_padding * 2),
-        area.bottom().saturating_sub(header_y + 1),
+    key_hints(
+        &[Hint::whole("Backspace Back"), Hint::whole("j/k Scroll")],
+        " · ",
+        columns,
+        settings,
     )
 }
 
+/// Where a view inside the Tick's frame lays out its rows: all of it, a column in from either
+/// edge of a wide frame. The frame carries the title, so no row goes to one.
+pub fn table_content_area(area: Rect) -> Rect {
+    let horizontal_padding = u16::from(area.width >= WIDE_PANEL_COLUMNS);
+    Rect::new(
+        area.x + horizontal_padding,
+        area.y,
+        area.width.saturating_sub(horizontal_padding * 2),
+        area.height,
+    )
+}
+
+/// Draws `table` in `area`, its columns by `priority` as the width allows, and gives the Tick's
+/// frame `title`.
 pub fn draw_table(
     frame: &mut Frame<'_>,
+    area: Rect,
     title: &str,
     table: &TableData,
     priority: &[usize],
     state: &mut ViewState,
     settings: &Settings,
 ) {
-    let area = frame.area();
     let styles = settings.styles();
     frame.buffer_mut().set_style(area, styles.panel_base());
-    if area.width < 8 || area.height < 4 {
+    state.title = title.to_owned();
+    if area.width < 8 || area.height < 2 {
         frame.render_widget(Paragraph::new("Too small").style(styles.muted_text), area);
         return;
     }
     let inner = table_content_area(area);
-    write_text(
-        frame.buffer_mut(),
-        inner.x,
-        area.y,
-        title,
-        inner.width as usize,
-        settings.ambiguous_width,
-        styles.panel_base().patch(styles.title),
-    );
     let rows = table.display_rows(settings);
     let headers: Vec<&str> = table
         .headers
@@ -1180,11 +1240,13 @@ pub fn draw_table(
                 Rect::new(inner.x, y, inner.width, 1),
                 styles.panel_base().patch(styles.selection),
             );
+            // The selection's style marks it; a wide frame also has the column for a pointer.
+            let pointer = if inner.x > area.x { ">" } else { "" };
             write_text(
                 frame.buffer_mut(),
                 area.x,
                 y,
-                ">",
+                pointer,
                 1,
                 settings.ambiguous_width,
                 styles.panel_base().patch(styles.selection),

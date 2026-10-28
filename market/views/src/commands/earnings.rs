@@ -41,6 +41,8 @@ const DETAIL_TOOL: &str = "detail";
 const SYMBOL_SUFFIX: &str = ".US";
 const NON_US_SYMBOL: &str = "Earnings covers US symbols only in this version";
 const INFO_SEPARATOR: &str = " · ";
+/// The fewest rows inside the frame that hold the line of facts and keys above the table.
+const INFO_LINE_ROWS: u16 = 8;
 
 /// The calendar answers one date per page, so a search window costs at most this many pages
 /// before the Tick gives up on it.
@@ -685,18 +687,16 @@ impl EarningsView {
         }
     }
 
-    /// The title that fits `columns`: the full one, else the symbol and mode alone, else the
-    /// symbol and the mode's own name without its qualifier.
+    /// The frame's title that fits `columns`: the symbol and mode, else the symbol and the
+    /// mode's own name without its qualifier, else that name alone, as the Monitor names the
+    /// Tick and its symbol already.
     fn panel_title(&self, columns: usize, ambiguous: AmbiguousWidth) -> String {
         let label = self.mode_label();
+        let name = label.split(INFO_SEPARATOR).next().unwrap_or(label);
         let candidates = [
-            self.title(),
             format!("{} · {label}", self.table.symbol),
-            format!(
-                "{} · {}",
-                self.table.symbol,
-                label.split(INFO_SEPARATOR).next().unwrap_or(label)
-            ),
+            format!("{} · {name}", self.table.symbol),
+            name.to_owned(),
         ];
         let fitting = candidates
             .iter()
@@ -711,7 +711,7 @@ impl EarningsView {
             return;
         }
         let styles = settings.styles();
-        let line = Rect::new(area.x, area.bottom() - 2, area.width, 1);
+        let line = Rect::new(area.x, area.bottom() - 1, area.width, 1);
         frame.render_widget(Clear, line);
         frame.buffer_mut().set_style(line, styles.overlay_base());
         let label = "Symbol: ";
@@ -1093,7 +1093,10 @@ impl LiveView for EarningsView {
         }
         let area = frame.area();
         let content_columns = crate::runtime::table_content_area(area).width as usize;
-        let title = self.panel_title(content_columns, settings.ambiguous_width);
+        let title = self.panel_title(
+            crate::runtime::frame_title_columns(area.width),
+            settings.ambiguous_width,
+        );
         let mut table = self.table();
         if self.mode == EarningsMode::Upcoming {
             // Labels that would take more than half the row read better in fewer words.
@@ -1108,8 +1111,23 @@ impl LiveView for EarningsView {
                 table = self.upcoming_table(true);
             }
         }
-        crate::runtime::draw_table(frame, &title, &table, self.priority(), state, settings);
-        if area.height >= 10 {
+        // A frame tall enough gives the line of facts and keys a row above the table.
+        let shows_info = area.height >= INFO_LINE_ROWS;
+        let table_area = Rect {
+            y: area.y + u16::from(shows_info),
+            height: area.height - u16::from(shows_info),
+            ..area
+        };
+        crate::runtime::draw_table(
+            frame,
+            table_area,
+            &title,
+            &table,
+            self.priority(),
+            state,
+            settings,
+        );
+        if shows_info {
             let styles = settings.styles();
             let observed = self
                 .table
@@ -1170,7 +1188,7 @@ impl LiveView for EarningsView {
             write_text(
                 frame.buffer_mut(),
                 content.x,
-                area.y + 1,
+                area.y,
                 &info_line(
                     &facts,
                     if settings.key_hints { hints } else { &[] },

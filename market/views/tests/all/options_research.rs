@@ -269,7 +269,8 @@ async fn historical_options_start_and_remain_readable_without_opend() {
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>();
-        assert!(text.contains("FY2026-Q2"));
+        // The frame's title, which the view gives, names the fiscal period.
+        assert!(state.title.contains("FY2026-Q2"), "{} {text}", state.title);
     }
 }
 

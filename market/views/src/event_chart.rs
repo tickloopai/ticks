@@ -778,10 +778,8 @@ impl EventChart {
         let count = self.data.as_ref().map_or(0, |data| data.candles.len());
         match key {
             KeyCode::Enter => self.details = !self.details,
-            KeyCode::Left | KeyCode::Char('h') | KeyCode::Up | KeyCode::Char('k') => {
-                self.cursor = self.cursor.saturating_sub(1)
-            }
-            KeyCode::Right | KeyCode::Char('l') | KeyCode::Down | KeyCode::Char('j') => {
+            KeyCode::Left | KeyCode::Char('h') => self.cursor = self.cursor.saturating_sub(1),
+            KeyCode::Right | KeyCode::Char('l') => {
                 self.cursor = (self.cursor + 1).min(count.saturating_sub(1))
             }
             KeyCode::Home | KeyCode::Char('g') => self.cursor = 0,
@@ -826,10 +824,12 @@ impl EventChart {
         Ok(true)
     }
 
+    /// Draws the chart and gives the Tick's frame its `title`.
     pub fn draw(
         &self,
         frame: &mut ratatui::Frame<'_>,
         symbol: &str,
+        title: &mut String,
         settings: &Settings,
         marks: &[crate::commands::kline::PriceMark],
     ) {
@@ -837,7 +837,10 @@ impl EventChart {
         let area = frame.area();
         let styles = settings.styles();
         frame.buffer_mut().set_style(area, styles.panel_base());
-        if area.width < MINIMUM_PANEL_SIZE.columns || area.height < MINIMUM_PANEL_SIZE.rows {
+        let frame_width = crate::runtime::FRAME_WIDTH * 2;
+        if area.width + frame_width < MINIMUM_PANEL_SIZE.columns
+            || area.height + frame_width < MINIMUM_PANEL_SIZE.rows
+        {
             frame.render_widget(
                 Paragraph::new(format!(
                     "Event chart needs {}×{}",
@@ -848,24 +851,24 @@ impl EventChart {
             );
             return;
         }
-        let mut title = format!(
-            " {symbol} · {} · {} ",
+        *title = format!(
+            "{symbol} · {} · {}",
             self.config.date,
             self.config.view.label()
         );
-        if tickloop_ui::format::width(&title, settings.ambiguous_width)
-            > usize::from(area.width.saturating_sub(2))
-        {
-            // The release line repeats the date, so a narrow title keeps the view instead.
-            title = format!(" {symbol} · {} ", self.config.view.label());
+        let fits_title = |title: &str| {
+            tickloop_ui::format::width(title, settings.ambiguous_width)
+                <= crate::runtime::frame_title_columns(area.width)
+        };
+        // The release line repeats the date, and the Monitor names the symbol, so a narrow title
+        // keeps the view.
+        if !fits_title(title) {
+            *title = format!("{symbol} · {}", self.config.view.label());
         }
-        let block = Block::default()
-            .title(title)
-            .borders(Borders::ALL)
-            .style(styles.panel_base())
-            .border_style(styles.border);
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
+        if !fits_title(title) {
+            *title = self.config.view.label().to_owned();
+        }
+        let inner = area;
         let clock = MarketClock::for_symbol(symbol).ok();
         let fits = |value: &str| {
             tickloop_ui::format::width(value, settings.ambiguous_width) <= usize::from(inner.width)
@@ -984,18 +987,13 @@ impl EventChart {
         } else {
             "P pre R regular A post N night C auction * mixed"
         };
-        // The status row already offers Help (and Quit), so a Panel too narrow for every key
-        // keeps the chart's own keys on one line and drops that repeat.
+        // The frame offers Help and Quit, so the footer holds the chart's own keys.
         let keys = "v View · r / [ ] Range · e Event · Enter Detail";
+        // A card the user only looks at keeps the line blank, so entering it moves nothing.
         let footer = if !settings.key_hints {
-            Vec::new()
+            vec![String::new()]
         } else if fits(keys) {
-            let general = if crate::runtime::quits_on_keys() {
-                "? Help · q Quit"
-            } else {
-                "? Help"
-            };
-            vec![keys.to_owned(), general.to_owned()]
+            vec![keys.to_owned()]
         } else {
             vec![tickloop_ui::format::fit_hints(
                 &[
@@ -1120,7 +1118,7 @@ impl EventChart {
                 Paragraph::new(if settings.key_hints {
                     format!("{lines}\nEnter Select · Backspace Back")
                 } else {
-                    lines
+                    format!("{lines}\n")
                 })
                 .block(
                     Block::default()
@@ -1137,7 +1135,7 @@ impl EventChart {
             let back = if settings.key_hints {
                 "\nBackspace Back"
             } else {
-                ""
+                "\n"
             };
             let detail_text = |note: &str| {
                 format!(
@@ -1690,9 +1688,10 @@ impl EventEditor {
         // The keys come first, so a narrow editor that wraps the field notes still shows them.
         let help = "Tab Next field · Enter Apply · Ctrl+C Cancel\nDate: exchange-local YYYY-MM-DD\nSession: pre_market / after_hours / during_market / closed / unknown\nActual times: RFC3339 with offset, or blank if unknown";
         let help = if settings.key_hints {
-            help
+            help.to_owned()
         } else {
-            help.split_once('\n').map_or(help, |(_, notes)| notes)
+            help.split_once('\n')
+                .map_or(help.to_owned(), |(_, notes)| format!("\n{notes}"))
         };
         frame.render_widget(
             Paragraph::new(help)

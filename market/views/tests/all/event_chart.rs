@@ -11,7 +11,7 @@ use tick_market::{
         EventChartConfig, EventRange, EventSession, load_history, resolve_window,
         resolve_window_with_half_days,
     },
-    runtime::{LiveView, ViewState},
+    runtime::{FRAME_WIDTH, LiveView, ViewState},
 };
 use tick_provider::{
     api::{
@@ -335,7 +335,7 @@ async fn event_chart_renders_at_narrow_and_wide_sizes_and_the_editor_has_no_mode
     let mut view = KlineView::with_event(request(), config()).unwrap();
     view.load_event(&api).await.unwrap();
     for (width, height) in [(32, 14), (64, 22), (120, 32)] {
-        assert!(drawn(&view, width, height).contains("DEMO.US"));
+        assert!(drawn(&view, width, height).contains("Event line"));
     }
     let mut state = ViewState::default();
     view.on_key(KeyCode::Char('e'), &api, &mut state)
@@ -403,19 +403,25 @@ async fn ctrl_c_quits_while_an_applied_event_edit_is_still_loading() {
     drop(keys);
 }
 
+/// The view drawn inside a frame `width` by `height`, after the title it gives the frame.
 fn drawn(view: &KlineView, width: u16, height: u16) -> String {
-    let mut terminal =
-        ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(
+        width - FRAME_WIDTH * 2,
+        height - FRAME_WIDTH * 2,
+    ))
+    .unwrap();
+    let mut state = ViewState::default();
     terminal
-        .draw(|frame| view.draw(frame, &mut ViewState::default(), &Settings::default()))
+        .draw(|frame| view.draw(frame, &mut state, &Settings::default()))
         .unwrap();
-    terminal
+    let content: String = terminal
         .backend()
         .buffer()
         .content
         .iter()
         .map(|cell| cell.symbol())
-        .collect()
+        .collect();
+    format!("{}\n{content}", state.title)
 }
 
 #[test]
@@ -677,19 +683,31 @@ async fn compressed_event_plot_identifies_volume_sums_and_mixed_sessions() {
         // A narrow Panel leaves out the candle count rather than wrap it.
         assert_eq!(rendered.contains("10560 bars /"), width == 120);
         assert!(rendered.contains("V sum/col"));
-        let sessions = (1..width - 11)
-            .map(|x| buffer[(x, height - 6)].symbol())
-            .collect::<String>();
-        assert!(sessions.contains('*'));
+        let row = |label: &str| {
+            (0..height)
+                .map(|y| {
+                    (0..width)
+                        .map(|x| buffer[(x, y)].symbol())
+                        .collect::<String>()
+                })
+                .find(|row| row.trim_end().ends_with(label))
+                .unwrap_or_else(|| panic!("no row labelled {label:?}: {rendered}"))
+        };
+        // The plot's columns end where the scale's labels begin.
+        let plot = |row: String| {
+            row.chars()
+                .take(usize::from(width) - 11)
+                .collect::<String>()
+        };
+        let sessions = plot(row("session"));
+        assert!(sessions.contains('*'), "{sessions:?}");
         if width == 120 {
             assert!(sessions.contains('P'));
             assert!(sessions.contains('R'));
             assert!(sessions.contains('A'));
             assert!(sessions.contains(' '));
         }
-        let volume = (1..width - 11)
-            .map(|x| buffer[(x, height - 7)].symbol())
-            .collect::<String>();
+        let volume = plot(row("V sum/col"));
         assert!(!volume.trim().is_empty());
     }
 }

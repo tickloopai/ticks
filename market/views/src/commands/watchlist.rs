@@ -211,12 +211,10 @@ impl crate::runtime::LiveView for WatchlistView {
         crate::metadata::TickKind::Watchlist
     }
     fn title(&self) -> String {
-        format!(
-            "Watchlist · {}",
-            self.groups
-                .get(self.selected_group)
-                .map_or("No groups", |group| group.name.as_str())
-        )
+        self.groups
+            .get(self.selected_group)
+            .map_or("No groups", |group| group.name.as_str())
+            .to_owned()
     }
     fn table(&self) -> TableData {
         WatchlistView::table(self)

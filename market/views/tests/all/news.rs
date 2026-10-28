@@ -307,9 +307,11 @@ async fn news_renderer_applies_resolved_styles_to_selection_markdown_and_blank_c
             .contains(Modifier::BOLD | Modifier::UNDERLINED)
     );
     assert!(!selected.modifier.contains(Modifier::ITALIC));
-    assert_eq!(list[(17, 2)].symbol(), " ");
+    // The view fills the inside of the Tick's frame: the header on its first row, the selected
+    // headline below, the gap after the time column at column 16.
+    assert_eq!(list[(16, 1)].symbol(), " ");
     assert_eq!(
-        list[(17, 2)].bg,
+        list[(16, 1)].bg,
         Color::Indexed(110),
         "selection covers column gaps"
     );

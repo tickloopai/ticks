@@ -254,10 +254,9 @@ impl Describe for TickKind {
             state: (!descriptor.series.is_empty()).then_some(StateDeclaration {
                 series: descriptor.series,
             }),
-            // TODO: declare `max_rows` from `descriptor.maximum_rows` once tick_protocol's
-            // ScreenDeclaration has it; hosts that know it read it from there.
             screen: Some(ScreenDeclaration {
                 min_rows: descriptor.minimum_panel_size.map(|minimum| minimum.rows),
+                max_rows: descriptor.maximum_rows,
             }),
         })
     }
@@ -354,12 +353,15 @@ mod tests {
 
     /// A host grows a card from its Tick's minimum rows up to its maximum.
     #[test]
-    fn every_maximum_is_at_least_the_ticks_minimum() {
+    fn every_tick_declares_a_maximum_of_at_least_its_minimum_or_none() {
         for kind in TickKind::ALL {
-            if let Some(maximum) = kind.maximum_rows() {
-                assert!(kind.minimum_panel_size().rows <= maximum, "{kind:?}");
+            let screen = Describe::descriptor(&kind).unwrap().screen.unwrap();
+            assert_eq!(screen.max_rows, kind.maximum_rows(), "{kind:?}");
+            if let Some(maximum) = screen.max_rows {
+                assert!(screen.min_rows.unwrap() <= maximum, "{kind:?}");
             }
         }
+        assert_eq!(TickKind::Quote.maximum_rows(), None);
     }
 
     #[test]

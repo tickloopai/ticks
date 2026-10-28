@@ -32,6 +32,10 @@ pub const DEFAULT_ONCE_COUNT: usize = 80;
 pub const MAX_HISTORY_DAYS: i64 = 1000;
 const CANDLES_TOOL: &str = "candles";
 const MARK_TOOL: &str = "mark";
+/// The least room inside the Tick's frame that holds the price summary and a chart.
+const MINIMUM_CHART_AREA: ratatui::layout::Size = ratatui::layout::Size::new(22, 8);
+/// The fewest rows inside the frame that keep a line for the research keys under the event chart.
+const RESEARCH_KEYS_ROWS: u16 = 12;
 const UNMARK_TOOL: &str = "unmark";
 pub const HEADERS: &[&str] = &[
     "Timestamp",
@@ -623,7 +627,7 @@ impl crate::runtime::LiveView for KlineView {
         Ok(json!({"marks": self.marks}))
     }
     fn help(&self) -> &'static str {
-        "Backspace  Back\nh/l or Left/Right  Select candle\nj/k or Ctrl+N/P  Navigate visible list / event samples\ne  Edit publication event (Tab field, Enter apply, Ctrl+C cancel)\nv  Event view picker · r Event range picker\n[ / ]  Previous / next event range\nEnter  Event candle detail\na  Ask Chat about the selected research observation\ng / G  First / latest candle\nPageUp / PageDown  Move one screen\nOrdinary Kline: 1 day · 2 week · 3 month · 4 1m\n5 5m · 6 15m · 7 30m · 8 60m · m MA\nHistory refresh every 30s; API calendar determines sessions"
+        "Backspace  Back\nh/l or Left/Right  Select candle / event sample\nj/k or Up/Down  Move in the view and range pickers\ne  Edit publication event (Tab field, Enter apply, Ctrl+C cancel)\nv  Event view picker · r Event range picker\n[ / ]  Previous / next event range\nEnter  Event candle detail\na  Ask Chat about the selected research observation\ng / G  First / latest candle\nPageUp / PageDown  Move one screen\nOrdinary Kline: 1 day · 2 week · 3 month · 4 1m\n5 5m · 6 15m · 7 30m · 8 60m · m MA\nHistory refresh every 30s; API calendar determines sessions"
     }
     fn captures_text(&self) -> bool {
         self.event_editor.is_some()
@@ -746,10 +750,8 @@ impl crate::runtime::LiveView for KlineView {
                 .await;
         }
         match key {
-            KeyCode::Left | KeyCode::Char('h') | KeyCode::Up | KeyCode::Char('k') => {
-                self.cursor = self.cursor.saturating_sub(1)
-            }
-            KeyCode::Right | KeyCode::Char('l') | KeyCode::Down | KeyCode::Char('j') => {
+            KeyCode::Left | KeyCode::Char('h') => self.cursor = self.cursor.saturating_sub(1),
+            KeyCode::Right | KeyCode::Char('l') => {
                 self.cursor = (self.cursor + 1).min(self.candles.len().saturating_sub(1))
             }
             KeyCode::Char('g') | KeyCode::Home => self.cursor = 0,
@@ -826,37 +828,35 @@ impl crate::runtime::LiveView for KlineView {
             return;
         }
         if let Some(event) = &self.event {
-            event.draw(frame, &self.request.symbol, settings, &self.marks);
+            event.draw(
+                frame,
+                &self.request.symbol,
+                &mut state.title,
+                settings,
+                &self.marks,
+            );
             if let Some(context) = &self.research
                 && !event.has_overlay()
                 && self.event_editor.is_none()
-                && frame.area().height >= 14
+                && frame.area().height >= RESEARCH_KEYS_ROWS
             {
                 let area = frame.area();
-                tickloop_ui::format::write_text(
-                    frame.buffer_mut(),
-                    area.x + 2,
-                    area.y,
-                    &format!(
-                        " {} · {} · {} ",
-                        context.title(),
-                        event.config.date,
-                        event.config.view.label()
-                    ),
-                    usize::from(area.width.saturating_sub(4)),
-                    settings.ambiguous_width,
-                    settings.styles().title,
+                state.title = format!(
+                    "{} · {} · {}",
+                    context.title(),
+                    event.config.date,
+                    event.config.view.label()
                 );
                 tickloop_ui::format::write_text(
                     frame.buffer_mut(),
-                    area.x + 1,
-                    area.bottom() - 2,
+                    area.x,
+                    area.bottom() - 1,
                     if settings.key_hints {
                         "a Ask Chat · ? Help"
                     } else {
                         ""
                     },
-                    usize::from(area.width.saturating_sub(2)),
+                    usize::from(area.width),
                     settings.ambiguous_width,
                     settings.styles().status_base(),
                 );
@@ -866,7 +866,7 @@ impl crate::runtime::LiveView for KlineView {
             }
             return;
         }
-        use ratatui::widgets::{Block, Borders, Paragraph};
+        use ratatui::widgets::Paragraph;
         use rust_decimal::prelude::ToPrimitive;
         use tickloop_ui::{
             format::{Hint, fit_hints, pack_fields, width, write_text},
@@ -875,17 +875,12 @@ impl crate::runtime::LiveView for KlineView {
         let area = frame.area();
         let styles = settings.styles();
         frame.buffer_mut().set_style(area, styles.panel_base());
-        if area.width < 24 || area.height < 10 {
+        if area.width < MINIMUM_CHART_AREA.width || area.height < MINIMUM_CHART_AREA.height {
             frame.render_widget(Paragraph::new("Kline needs more space"), area);
             return;
         }
-        let block = Block::default()
-            .title(format!(" {} ", self.title()))
-            .borders(Borders::ALL)
-            .style(styles.panel_base())
-            .border_style(styles.border);
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
+        let inner = area;
+        state.title = self.title();
         if self.candles.is_empty() {
             frame.render_widget(Paragraph::new("No candlesticks"), inner);
             return;
