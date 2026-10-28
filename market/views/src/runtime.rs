@@ -26,6 +26,8 @@ use tickloop_ui::{
 const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
 const WIDE_PANEL_COLUMNS: u16 = 64;
 const TALL_PANEL_ROWS: u16 = 10;
+const HELP_TITLE: &str = " Keys · ? / Backspace close ";
+const NARROW_HELP_TITLE: &str = " Keys · ? close ";
 pub const CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 pub const REFRESH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 /// A Tick Tool call runs beside the view, so both the number in flight and how
@@ -545,7 +547,15 @@ fn render<V: LiveView, B: Backend>(
                 })
                 .block(
                     Block::default()
-                        .title(" Keys · ? / Backspace close ")
+                        .title(
+                            if width(HELP_TITLE, settings.ambiguous_width) + 4
+                                <= usize::from(area.width)
+                            {
+                                HELP_TITLE
+                            } else {
+                                NARROW_HELP_TITLE
+                            },
+                        )
                         .borders(Borders::ALL)
                         .border_style(styles.border),
                 )
@@ -747,6 +757,37 @@ pub fn draw_connecting<B: Backend>(
     Ok(())
 }
 
+/// The key line under a list of articles or posts; a narrow Panel drops the keys the status row
+/// already offers.
+pub fn reading_list_keys(columns: usize, settings: &Settings) -> String {
+    use tickloop_ui::format::{Hint, fit_hints};
+    fit_hints(
+        &[
+            Hint::whole("Enter Read"),
+            Hint::whole("? Help"),
+            Hint::whole("q Quit"),
+        ],
+        "  ·  ",
+        columns,
+        settings.ambiguous_width,
+    )
+}
+
+/// The key line under an open article or post.
+pub fn reading_keys(columns: usize, settings: &Settings) -> String {
+    use tickloop_ui::format::{Hint, fit_hints};
+    fit_hints(
+        &[
+            Hint::whole("Backspace Back"),
+            Hint::whole("j/k Scroll"),
+            Hint::whole("q Quit"),
+        ],
+        " · ",
+        columns,
+        settings.ambiguous_width,
+    )
+}
+
 pub fn table_content_area(area: Rect) -> Rect {
     let horizontal_padding = if area.width >= WIDE_PANEL_COLUMNS {
         2
@@ -793,7 +834,7 @@ pub fn draw_table(
         .iter()
         .map(|header| crate::output::short_header(header))
         .collect();
-    let widths: Vec<usize> = headers
+    let mut widths: Vec<usize> = headers
         .iter()
         .enumerate()
         .map(|(index, header)| {
@@ -805,6 +846,18 @@ pub fn draw_table(
                 .clamp(4, 28)
         })
         .collect();
+    // A Panel too narrow for the two leading columns side by side truncates them, the first
+    // keeping at least half the room, rather than drop the second: a label is no use alone.
+    if let [first, second, ..] = priority
+        && *first < widths.len()
+        && *second < widths.len()
+    {
+        let room = (inner.width as usize).saturating_sub(2);
+        if widths[*first] + widths[*second] > room {
+            widths[*first] = widths[*first].min(room.saturating_sub(widths[*second]).max(room / 2));
+            widths[*second] = widths[*second].min(room.saturating_sub(widths[*first]));
+        }
+    }
     let mut remaining = inner.width as usize;
     let mut columns = Vec::new();
     for &index in priority {

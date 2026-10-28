@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
 use crossterm::event::KeyCode;
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -20,18 +20,31 @@ use tick_provider::{
 };
 
 const CALENDAR_LOOKAROUND_DAYS: i64 = 45;
-/// The release, window and baseline lines and the key rows stay whole from this size; the
-/// plain candlestick layout of the Kline Tick needs less.
+/// The release, baseline and selected-candle lines stay whole from this size, wrapped in a
+/// narrow Panel, which also leaves out the candle count and the window's instants.
 pub const MINIMUM_PANEL_SIZE: crate::metadata::MinimumPanelSize =
     crate::metadata::MinimumPanelSize {
-        columns: 60,
+        columns: crate::metadata::MINIMUM_PANEL_COLUMNS,
         rows: 14,
     };
+/// The fewest rows the chart keeps for its price, volume, session and date rows together.
+const MINIMUM_CHART_ROWS: u16 = 4;
 const MAX_EVENT_CANDLES: usize = 12_000;
 pub const MAX_EVENT_PAGE_CANDLES: usize = 1_000;
 /// The query Tick Tool that pages through an event window's candles.
 pub const EVENT_HISTORY_TOOL: &str = "event_history";
 type PriceVolumeBin = (f64, f64, f64, f64, i64);
+
+/// The header lines of the event chart, most needed first.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum HeaderRank {
+    Release,
+    Baseline,
+    Candle,
+    Window,
+    TimeZone,
+    Bounds,
+}
 
 #[derive(
     Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema, clap::ValueEnum,
@@ -820,85 +833,115 @@ impl EventChart {
         settings: &Settings,
         marks: &[crate::commands::kline::PriceMark],
     ) {
-        use tickloop_ui::format::write_text;
+        use tickloop_ui::format::{Hint, write_text};
         let area = frame.area();
         let styles = settings.styles();
         frame.buffer_mut().set_style(area, styles.panel_base());
-        if area.width < 32 || area.height < 14 {
+        if area.width < MINIMUM_PANEL_SIZE.columns || area.height < MINIMUM_PANEL_SIZE.rows {
             frame.render_widget(
-                Paragraph::new("Event chart needs 32×14").style(styles.muted_text),
+                Paragraph::new(format!(
+                    "Event chart needs {}×{}",
+                    MINIMUM_PANEL_SIZE.columns, MINIMUM_PANEL_SIZE.rows
+                ))
+                .style(styles.muted_text),
                 area,
             );
             return;
         }
+        let mut title = format!(
+            " {symbol} · {} · {} ",
+            self.config.date,
+            self.config.view.label()
+        );
+        if tickloop_ui::format::width(&title, settings.ambiguous_width)
+            > usize::from(area.width.saturating_sub(2))
+        {
+            // The release line repeats the date, so a narrow title keeps the view instead.
+            title = format!(" {symbol} · {} ", self.config.view.label());
+        }
         let block = Block::default()
-            .title(format!(
-                " {symbol} · {} · {} ",
-                self.config.date,
-                self.config.view.label()
-            ))
+            .title(title)
             .borders(Borders::ALL)
             .style(styles.panel_base())
             .border_style(styles.border);
         let inner = block.inner(area);
         frame.render_widget(block, area);
-        let width = usize::from(inner.width);
         let clock = MarketClock::for_symbol(symbol).ok();
-        let text = |frame: &mut ratatui::Frame<'_>, row: u16, value: &str, style| {
-            write_text(
-                frame.buffer_mut(),
-                inner.x,
-                inner.y + row,
-                value,
-                width,
-                settings.ambiguous_width,
-                style,
-            )
+        let fits = |value: &str| {
+            tickloop_ui::format::width(value, settings.ambiguous_width) <= usize::from(inner.width)
         };
         let data = self.data.as_ref();
         let publication = data
             .and_then(|data| data.window.published_at.as_deref())
             .or(self.config.published_at.as_deref())
             .unwrap_or("exact publication time unknown; no T=0 marker");
-        text(
-            frame,
-            0,
-            &format!(
-                "{} bars / {} cols · {} · {}",
-                data.map_or(0, |data| data.candles.len()),
-                inner.width.saturating_sub(10),
-                self.config.range.label(),
-                data.map_or(self.config.session, |data| data.window.release_session)
-                    .label()
-            ),
+        // Key lines wrap in a narrow Panel; the diagnostic candle count and the window's
+        // instants show only where they stay whole on one line. Each line has a rank, and a
+        // Panel too short for every line keeps the best ranked that leave the chart its rows.
+        let mut header: Vec<(HeaderRank, String, ratatui::style::Style)> = Vec::new();
+        let window = format!(
+            "{} · {}",
+            self.config.range.label(),
+            data.map_or(self.config.session, |data| data.window.release_session)
+                .label()
+        );
+        let counted_window = format!(
+            "{} bars / {} cols · {window}",
+            data.map_or(0, |data| data.candles.len()),
+            inner.width.saturating_sub(10),
+        );
+        header.push((
+            HeaderRank::Window,
+            if fits(&counted_window) {
+                counted_window
+            } else {
+                window
+            },
             styles.text,
-        );
-        text(
-            frame,
-            1,
-            &format!("Release: {publication}"),
-            styles.muted_text,
-        );
-        if let Some(data) = data {
-            text(
-                frame,
-                2,
-                &format!("{} → {}", data.window.start, data.window.end),
-                styles.muted_text,
-            );
-            text(
-                frame,
-                3,
-                &format!(
-                    "Baseline {} regular close {} · {}",
-                    data.window.baseline_date.as_deref().unwrap_or("unknown"),
-                    data.baseline
-                        .map(|value| value.normalize().to_string())
-                        .unwrap_or_else(|| "unavailable".into()),
-                    data.window.market_timezone
+        ));
+        let release = format!("Release: {publication}");
+        let local_publication = OffsetDateTime::parse(publication, &Rfc3339).ok();
+        header.push((
+            HeaderRank::Release,
+            match local_publication.map(|at| clock.map_or(at, |clock| clock.local(at))) {
+                Some(at) if !fits(&release) => format!(
+                    "Release {} {:02}:{:02}",
+                    iso_date(at.date()),
+                    at.hour(),
+                    at.minute()
                 ),
-                styles.muted_text,
+                _ => release,
+            },
+            styles.muted_text,
+        ));
+        if let Some(data) = data {
+            let bounds = format!("{} → {}", data.window.start, data.window.end);
+            if fits(&bounds) {
+                header.push((HeaderRank::Bounds, bounds, styles.muted_text));
+            }
+            let baseline_date = data.window.baseline_date.as_deref().unwrap_or("unknown");
+            let baseline_close = data
+                .baseline
+                .map(|value| value.normalize().to_string())
+                .unwrap_or_else(|| "unavailable".into());
+            let baseline = format!(
+                "Baseline {baseline_date} regular close {baseline_close} · {}",
+                data.window.market_timezone
             );
+            if fits(&baseline) {
+                header.push((HeaderRank::Baseline, baseline, styles.muted_text));
+            } else {
+                header.push((
+                    HeaderRank::Baseline,
+                    format!("Baseline {baseline_close} · {baseline_date}"),
+                    styles.muted_text,
+                ));
+                header.push((
+                    HeaderRank::TimeZone,
+                    format!("Times in {}", data.window.market_timezone),
+                    styles.muted_text,
+                ));
+            }
         }
         let selected = data.and_then(|data| data.candles.get(self.cursor));
         if let Some(candle) = selected {
@@ -906,10 +949,9 @@ impl EventChart {
             let change = data
                 .and_then(|data| data.baseline)
                 .map(|baseline| (candle.close - baseline) / baseline * Decimal::ONE_HUNDRED);
-            text(
-                frame,
-                4,
-                &format!(
+            header.push((
+                HeaderRank::Candle,
+                format!(
                     "{} {:02}:{:02} {} C {} ({}) V {}",
                     iso_date(at.date()),
                     at.hour(),
@@ -935,13 +977,75 @@ impl EventChart {
                     candle.volume
                 ),
                 styles.text,
-            );
+            ));
         }
+        let legend = if self.config.view == EventChartMode::Daily {
+            "Regular only · OHLC grouped by column · V = column sum"
+        } else {
+            "P pre R regular A post N night C auction * mixed"
+        };
+        // The status row already offers Help and Quit, so a Panel too narrow for every key
+        // keeps the chart's own keys on one line and drops that repeat.
+        let keys = "v View · r / [ ] Range · e Event · Enter Detail";
+        let footer = if fits(keys) {
+            vec![keys.to_owned(), "? Help · q Quit".to_owned()]
+        } else {
+            vec![tickloop_ui::format::fit_hints(
+                &[
+                    Hint::new("v View", "v View"),
+                    Hint::new("r / [ ] Range", "r Range"),
+                    Hint::new("e Event", "e Event"),
+                    Hint::new("Enter Detail", "Enter"),
+                ],
+                " · ",
+                usize::from(inner.width),
+                settings.ambiguous_width,
+            )]
+        };
+        let rows = |value: &str| {
+            u16::try_from(
+                Paragraph::new(value)
+                    .wrap(Wrap { trim: true })
+                    .line_count(inner.width),
+            )
+            .unwrap_or(u16::MAX)
+        };
+        let footer_rows = rows(legend) + footer.len() as u16;
+        let mut budget = inner
+            .height
+            .saturating_sub(footer_rows + MINIMUM_CHART_ROWS);
+        let mut ranked: Vec<usize> = (0..header.len()).collect();
+        ranked.sort_by_key(|&index| header[index].0);
+        let mut kept = vec![false; header.len()];
+        for index in ranked {
+            let height = rows(&header[index].1);
+            if height > budget {
+                break;
+            }
+            budget -= height;
+            kept[index] = true;
+        }
+        let mut row = 0;
+        for (_, line, style) in header
+            .iter()
+            .zip(&kept)
+            .filter_map(|(line, kept)| kept.then_some(line))
+        {
+            let height = rows(line).min(inner.height.saturating_sub(row));
+            frame.render_widget(
+                Paragraph::new(line.as_str())
+                    .wrap(Wrap { trim: true })
+                    .style(*style),
+                ratatui::layout::Rect::new(inner.x, inner.y + row, inner.width, height),
+            );
+            row += height;
+        }
+        let legend_rows = rows(legend);
         let chart = ratatui::layout::Rect::new(
             inner.x,
-            inner.y + 5,
+            inner.y + row,
             inner.width,
-            inner.height.saturating_sub(8),
+            inner.height.saturating_sub(row + footer_rows),
         );
         if let Some(data) = data.filter(|data| !data.candles.is_empty()) {
             self.draw_prices(frame, chart, data, settings, marks, clock);
@@ -954,36 +1058,42 @@ impl EventChart {
                     .unwrap_or("No event candles returned; missing sessions are not filled")
             };
             frame.render_widget(
-                Paragraph::new(message).style(if self.last_error.is_some() {
-                    styles.error
-                } else {
-                    styles.muted_text
-                }),
+                Paragraph::new(message).wrap(Wrap { trim: true }).style(
+                    if self.last_error.is_some() {
+                        styles.error
+                    } else {
+                        styles.muted_text
+                    },
+                ),
                 chart,
             );
         }
-        text(
-            frame,
-            inner.height - 3,
-            if self.config.view == EventChartMode::Daily {
-                "Regular only · OHLC grouped by column · V = column sum"
-            } else {
-                "P pre R regular A post N night C auction * mixed"
-            },
-            styles.muted_text,
+        let footer_y = inner
+            .bottom()
+            .saturating_sub(footer_rows)
+            .max(chart.bottom());
+        frame.render_widget(
+            Paragraph::new(legend)
+                .wrap(Wrap { trim: true })
+                .style(styles.muted_text),
+            ratatui::layout::Rect::new(
+                inner.x,
+                footer_y,
+                inner.width,
+                legend_rows.min(inner.bottom().saturating_sub(footer_y)),
+            ),
         );
-        text(
-            frame,
-            inner.height - 2,
-            "v View · r / [ ] Range · e Event · Enter Detail",
-            styles.status_base(),
-        );
-        text(
-            frame,
-            inner.height - 1,
-            "? Help · q Quit",
-            styles.status_base(),
-        );
+        for (index, line) in footer.iter().enumerate() {
+            write_text(
+                frame.buffer_mut(),
+                inner.x,
+                footer_y + legend_rows + index as u16,
+                line,
+                usize::from(inner.width),
+                settings.ambiguous_width,
+                styles.status_base(),
+            );
+        }
         if let Some((picker, selected)) = self.picker {
             let labels = match picker {
                 Picker::View => EventChartMode::ALL.map(EventChartMode::label),
@@ -1013,9 +1123,47 @@ impl EventChart {
         } else if self.details
             && let Some(candle) = selected
         {
-            let popup = centered(area, 70, 10);
+            let detail_text = |note: &str| {
+                format!(
+                    "{}\nOpen {}   High {}\nLow {}   Close {}\nVolume {}  Turnover {}\nConference: {}\n{note}\nBackspace Back",
+                    format_instant(candle.timestamp),
+                    candle.open,
+                    candle.high,
+                    candle.low,
+                    candle.close,
+                    candle.volume,
+                    candle.turnover,
+                    self.config.conference_at.as_deref().unwrap_or("unknown"),
+                )
+            };
+            let detail_width = area.width.min(70);
+            let rows_of = |detail: &Paragraph<'_>| {
+                u16::try_from(detail.line_count(detail_width.saturating_sub(2)))
+                    .unwrap_or(u16::MAX)
+                    .saturating_add(2)
+            };
+            let mut detail = Paragraph::new(detail_text(
+                data.map_or("", |data| data.window.session_boundary_note),
+            ))
+            .wrap(Wrap { trim: true });
+            if rows_of(&detail) > area.height {
+                // A Panel too short for the session note keeps the candle and the way back.
+                detail = Paragraph::new(detail_text("")).wrap(Wrap { trim: true });
+            }
+            let detail_rows = rows_of(&detail).max(10);
+            let popup = centered(area, detail_width, detail_rows);
             frame.render_widget(Clear, popup);
-            frame.render_widget(Paragraph::new(format!("{}\nOpen {}   High {}\nLow {}   Close {}\nVolume {}  Turnover {}\nConference: {}\n{}\nBackspace Back", format_instant(candle.timestamp), candle.open,candle.high,candle.low,candle.close,candle.volume,candle.turnover,self.config.conference_at.as_deref().unwrap_or("unknown"),data.map_or("",|data|data.window.session_boundary_note))).block(Block::default().title("Candle / event detail").borders(Borders::ALL).border_style(styles.border)).style(styles.overlay_base()), popup);
+            frame.render_widget(
+                detail
+                    .block(
+                        Block::default()
+                            .title("Candle / event detail")
+                            .borders(Borders::ALL)
+                            .border_style(styles.border),
+                    )
+                    .style(styles.overlay_base()),
+                popup,
+            );
         }
     }
 
@@ -1523,9 +1671,12 @@ impl EventEditor {
                 ));
             }
         }
-        let help = "Date: exchange-local YYYY-MM-DD\nSession: pre_market / after_hours / during_market / closed / unknown\nActual times: RFC3339 with offset, or blank if unknown\nTab Next field · Enter Apply · Ctrl+C Cancel";
+        // The keys come first, so a narrow editor that wraps the field notes still shows them.
+        let help = "Tab Next field · Enter Apply · Ctrl+C Cancel\nDate: exchange-local YYYY-MM-DD\nSession: pre_market / after_hours / during_market / closed / unknown\nActual times: RFC3339 with offset, or blank if unknown";
         frame.render_widget(
-            Paragraph::new(help).style(styles.muted_text),
+            Paragraph::new(help)
+                .wrap(Wrap { trim: true })
+                .style(styles.muted_text),
             ratatui::layout::Rect::new(
                 inner.x,
                 inner.y + 5,

@@ -12,6 +12,7 @@ pub mod input;
 pub mod metadata;
 pub mod options;
 pub mod output;
+mod quote_cards;
 pub mod reader;
 pub mod research;
 pub mod runtime;

@@ -30,6 +30,8 @@ use tick_provider::{
 use tick_sdk::stream::TickStream;
 
 const HEADERS: &[&str] = &["Published At", "Source", "Title", "Id", "Url"];
+/// Below this many columns for the headline, the source gives its room to the headline.
+const MINIMUM_TITLE_COLUMNS: usize = 19;
 const REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 
 pub fn table(items: &[NewsItem]) -> TableData {
@@ -159,7 +161,7 @@ impl<'a> NewsView<'a> {
                 frame.buffer_mut(),
                 inner.x,
                 inner.bottom() - 1,
-                "Backspace Back · j/k Scroll · q Quit",
+                &crate::runtime::reading_keys(inner.width as usize, settings),
                 inner.width as usize,
                 settings.ambiguous_width,
                 styles.muted_text,
@@ -288,8 +290,17 @@ impl LiveView for NewsView<'_> {
             return;
         }
         let time_width = if inner.width >= 65 { 16 } else { 5 };
-        let source_width = if inner.width >= 65 { 14 } else { 8 };
-        let title_width = (inner.width as usize).saturating_sub(time_width + source_width + 4);
+        let mut source_width = if inner.width >= 65 { 14 } else { 8 };
+        let mut title_width = (inner.width as usize).saturating_sub(time_width + source_width + 4);
+        if title_width < MINIMUM_TITLE_COLUMNS {
+            source_width = 0;
+            title_width = (inner.width as usize).saturating_sub(time_width + 2);
+        }
+        let time_header = if time_width < HEADERS[0].len() {
+            crate::output::short_header(HEADERS[0])
+        } else {
+            HEADERS[0]
+        };
         let visible = inner.height.saturating_sub(2) as usize;
         self.page_size.set(visible.max(1));
         state.selected = self.selected_index();
@@ -305,7 +316,7 @@ impl LiveView for NewsView<'_> {
             .enumerate()
         {
             let time = item.map_or_else(
-                || HEADERS[0].to_owned(),
+                || time_header.to_owned(),
                 |item| {
                     OffsetDateTime::parse(&item.published_at, &Rfc3339)
                         .ok()
@@ -338,6 +349,7 @@ impl LiveView for NewsView<'_> {
             for (value, columns) in values
                 .into_iter()
                 .zip([time_width, source_width, title_width])
+                .filter(|(_, columns)| *columns > 0)
             {
                 write_text(
                     frame.buffer_mut(),
@@ -373,7 +385,7 @@ impl LiveView for NewsView<'_> {
             frame.buffer_mut(),
             inner.x,
             inner.bottom() - 1,
-            "Enter Read  ·  ? Help  ·  q Quit",
+            &crate::runtime::reading_list_keys(inner.width as usize, settings),
             inner.width as usize,
             settings.ambiguous_width,
             styles.muted_text,

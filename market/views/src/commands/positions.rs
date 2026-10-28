@@ -219,8 +219,9 @@ impl LiveView for PositionsView {
         }
     }
 
+    /// A narrow Panel keeps profit and loss before the price, which the Quote Tick shows.
     fn priority(&self) -> &[usize] {
-        &[0, 5, 7, 8, 2, 6, 1, 4, 3]
+        &[0, 7, 8, 5, 2, 6, 1, 4, 3]
     }
 
     fn draw(

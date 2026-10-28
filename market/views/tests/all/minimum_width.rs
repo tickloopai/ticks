@@ -17,6 +17,11 @@ use tick_test_support::{MockApi, MockCommunity, MockOptions, mock_library};
 
 /// The narrowest terminal every Tick is laid out for in full: a laptop at 80 columns.
 const LAPTOP: (u16, u16) = (80, 24);
+/// The narrowest Panel every Tick is laid out for at all: Tickloop's narrowest Monitor column,
+/// 32 columns less its separator.
+const MONITOR_COLUMNS: u16 = 30;
+/// Narrower than any Tick's minimum, so the Panel scrolls over the minimum layout.
+const BELOW_MINIMUM: [u16; 2] = [24, 20];
 /// The width the Ticks were laid out for before 80 columns became the target.
 const WIDE: (u16, u16) = (120, 24);
 const ROWS: u16 = 24;
@@ -68,14 +73,13 @@ fn every_tick() -> Vec<Scenario> {
             TickKind::Quote,
             &[],
             &[
-                "Symbol",
-                "Name",
-                "Change %",
+                "Quotes",
                 "700.HK",
                 "Demo · 腾讯控股",
                 "480.20",
                 "-11.80",
                 "-2.40%",
+                "H 4",
                 "? Help  q Quit",
             ],
         ),
@@ -89,13 +93,12 @@ fn every_tick() -> Vec<Scenario> {
             &[],
             &[
                 "Watchlist · Demo · US",
-                "Name",
-                "Change %",
-                "TSLA.US",
+                "▶ TSLA.US",
                 "Demo · Tesla",
                 "248.50",
-                "8.50",
+                "+8.50",
                 "+3.54%",
+                "H 2",
             ],
         ),
         scenario(
@@ -283,6 +286,221 @@ fn every_tick() -> Vec<Scenario> {
             &[],
             &[
                 "Reader · 财报原文",
+                "Quarterly results",
+                "Revenue was $12.8",
+                "1/4",
+            ],
+        ),
+    ]
+}
+
+/// Every Tick and mode with the fields a Panel at the minimum width keeps whole; the rest give
+/// way to them.
+fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
+    vec![
+        scenario(
+            TickKind::Quote,
+            &[],
+            &[
+                "Quotes",
+                "700.HK",
+                "480.20",
+                "-2.40%",
+                "-11.80",
+                "H 4",
+                "?  q Quit",
+            ],
+        ),
+        scenario(
+            TickKind::Quote,
+            &[KeyCode::Char('?')],
+            &[
+                "Keys · ? close",
+                "PageUp / PageDown  Page",
+                "g / G  First / last",
+            ],
+        ),
+        scenario(
+            TickKind::Watchlist,
+            &[],
+            &[
+                "Watchlist · Demo · US",
+                "▶ TSLA.US",
+                "248.50",
+                "+3.54%",
+                "+8.50",
+            ],
+        ),
+        scenario(
+            TickKind::Kline,
+            &[],
+            &[
+                "700.HK · day · none",
+                "2026-",
+                "O 4",
+                "H 4",
+                "L 4",
+                "C 4",
+                "V 2",
+                "Change -",
+                "1–8 Period · m MA off · Live",
+                "▲",
+            ],
+        ),
+        Scenario {
+            event_chart: true,
+            ..scenario(
+                TickKind::Kline,
+                &[],
+                &[
+                    "DEMO.US · Event line / 1m",
+                    "Auto event window ·",
+                    "Release 2026-08-07 16:05",
+                    "Baseline 243.4 · 2026-08-07",
+                    "Times in America/New_York",
+                    "v View · r Range · e Event",
+                ],
+            )
+        },
+        scenario(
+            TickKind::Positions,
+            &[],
+            &[
+                "Positions · 模拟盘账户",
+                "P/L",
+                "P/L %",
+                "TSLA.US",
+                "1920",
+                "+6.88%",
+                "Total HKD",
+            ],
+        ),
+        scenario(
+            TickKind::News,
+            &[],
+            &[
+                "News · Market",
+                "Time",
+                "09:30",
+                "Demo · Market recap",
+                "Enter Read  ·  ? Help",
+            ],
+        ),
+        scenario(
+            TickKind::News,
+            &[KeyCode::Enter],
+            &["示例资讯正文", "Backspace Back · j/k Scroll"],
+        ),
+        scenario(
+            TickKind::Community,
+            &[],
+            &[
+                "Community · Demo · 示例用户",
+                "Date",
+                "09-10",
+                "$Demo · Tesla",
+                "Enter Read  ·  ? Help",
+            ],
+        ),
+        scenario(
+            TickKind::Community,
+            &[KeyCode::Enter],
+            &["今天", "topic", "Backspace Back · j/k Scroll"],
+        ),
+        scenario(
+            TickKind::Earnings,
+            &[],
+            &[
+                "TSLA.US · Compare periods",
+                "UTC",
+                "EPS Act",
+                "EPS YoY",
+                "Q2 2026",
+            ],
+        ),
+        scenario(
+            TickKind::Earnings,
+            &[KeyCode::Enter],
+            &[
+                "TSLA.US · FY2026-Q2",
+                "estimates not archived",
+                "Metric",
+                "Actual",
+                "27300000000",
+            ],
+        ),
+        // The longest source a live read names gives way to the caveat.
+        Scenario {
+            source: Some("longbridge"),
+            ..scenario(
+                TickKind::Earnings,
+                &[KeyCode::Enter],
+                &["TSLA.US · FY2026-Q2", "estimates not archived"],
+            )
+        },
+        scenario(
+            TickKind::Earnings,
+            &[KeyCode::Char('r')],
+            &[
+                "TSLA.US · Market reactions",
+                "Day",
+                "Move",
+                "+0.79%",
+                "Counts",
+            ],
+        ),
+        scenario(
+            TickKind::Earnings,
+            &[KeyCode::Char('f')],
+            &[
+                "TSLA.US · Period originals",
+                "body not verified",
+                "Original",
+            ],
+        ),
+        scenario(
+            TickKind::Earnings,
+            &[KeyCode::Char('u')],
+            &[
+                "TSLA.US · Upcoming earnings",
+                "awaiting actuals",
+                "Upcoming",
+                "Not identified",
+            ],
+        ),
+        scenario(
+            TickKind::Earnings,
+            &[KeyCode::Char('s')],
+            &["Symbol:", "Enter apply", "Ctrl+C Cancel"],
+        ),
+        scenario(
+            TickKind::Earnings,
+            &[KeyCode::Char('?')],
+            &["Keys · ? close", "Enter  Period detail /"],
+        ),
+        scenario(
+            TickKind::Options,
+            &[],
+            &[
+                "AAPL.US · 2026-10-29",
+                "Spot 100.00 · ATM ±6.00%",
+                "Observed",
+                "Strike",
+                "C mid",
+                "P mid",
+                "80.0",
+                "3.10",
+                "2.90",
+                "[ ] expiry",
+                "No last-price substitution;",
+            ],
+        ),
+        scenario(
+            TickKind::Reader,
+            &[],
+            &[
+                "Reader · 财报原文",
+                "DEMO · FY2026 Q2 Earnings",
                 "Quarterly results",
                 "Revenue was $12.8",
                 "1/4",
@@ -529,7 +747,38 @@ async fn assert_whole(scenarios: Vec<Scenario>, size: impl Fn(&Scenario) -> (u16
 
 #[tokio::test(start_paused = true)]
 async fn every_tick_shows_its_key_fields_whole_at_its_own_minimum_width() {
-    assert_whole(every_tick(), |scenario| (scenario.minimum().columns, ROWS)).await;
+    assert_whole(every_tick_at_the_minimum_width(), |scenario| {
+        (scenario.minimum().columns, ROWS)
+    })
+    .await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn every_tick_holds_its_layout_at_its_full_minimum_size() {
+    for scenario in every_tick_at_the_minimum_width() {
+        let minimum = scenario.minimum();
+        let frame = text(&render(&scenario, minimum.columns, minimum.rows).await);
+        let label = scenario.label(minimum.columns, minimum.rows);
+        assert!(!frame.contains(SCROLL_HINT), "{label} scrolls:\n{frame}");
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_shortest_narrow_event_chart_keeps_its_popups_way_out_and_the_reader_its_prose() {
+    let event = |keys: &[KeyCode]| Scenario {
+        event_chart: true,
+        ..scenario(TickKind::Kline, keys, &[])
+    };
+    let minimum = EVENT_CHART_MINIMUM;
+    let detail = text(&render(&event(&[KeyCode::Enter]), minimum.columns, minimum.rows).await);
+    assert!(detail.contains("Backspace Back"), "{detail}");
+    let editor = text(&render(&event(&[KeyCode::Char('e')]), minimum.columns, 24).await);
+    assert!(editor.contains("Enter Apply"), "{editor}");
+
+    let reader = scenario(TickKind::Reader, &[], &[]);
+    let minimum = reader.minimum();
+    let frame = text(&render(&reader, minimum.columns, minimum.rows).await);
+    assert!(frame.contains("Quarterly results"), "{frame}");
 }
 
 #[tokio::test(start_paused = true)]
@@ -538,11 +787,14 @@ async fn every_tick_shows_its_key_fields_whole_on_an_80_column_laptop() {
 }
 
 #[test]
-fn every_minimum_width_fits_the_80_column_laptop() {
-    for kind in TickKind::ALL {
-        assert!(kind.minimum_panel_size().columns <= LAPTOP.0, "{kind:?}");
+fn every_minimum_width_fits_the_narrowest_monitor_column() {
+    let minimums = TickKind::ALL
+        .map(|kind| (kind.name(), kind.minimum_panel_size()))
+        .into_iter()
+        .chain([("event chart", EVENT_CHART_MINIMUM)]);
+    for (name, minimum) in minimums {
+        assert!(minimum.columns <= MONITOR_COLUMNS, "{name}");
     }
-    assert!(EVENT_CHART_MINIMUM.columns <= LAPTOP.0);
 }
 
 #[tokio::test(start_paused = true)]
@@ -558,7 +810,6 @@ async fn the_laptop_width_keeps_the_options_open_interest_columns() {
 async fn wider_panels_keep_the_columns_their_layouts_had() {
     assert_whole(
         vec![
-            scenario(TickKind::Quote, &[], &["Open", "High", "Low", "Turnover"]),
             scenario(TickKind::Positions, &[], &["Available"]),
             scenario(TickKind::Earnings, &[], &["Date", "· [ ] periods"]),
             scenario(TickKind::Earnings, &[KeyCode::Enter], &["QoQ", "Unit"]),
@@ -572,6 +823,56 @@ async fn wider_panels_keep_the_columns_their_layouts_had() {
         |_| WIDE,
     )
     .await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_lone_quote_card_widens_to_show_every_session_figure() {
+    let api = MockApi::new().unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(WIDE.0, WIDE.1)).unwrap();
+    commands::quote::run_live(
+        &QuoteArgs {
+            symbols: vec!["700.HK".into()],
+            output: OnceArgs::default(),
+        },
+        &api,
+        &Settings::default(),
+        &mut terminal,
+        keys(Vec::new()),
+        &mut TickStream::in_memory(TickKind::Quote),
+    )
+    .await
+    .unwrap();
+    let frame = text(&cells(&terminal));
+    for figure in ["H 4", "L 4", "Open 4", "Prev 4", "Vol ", "Turnover "] {
+        assert!(frame.contains(figure), "missing {figure:?}:\n{frame}");
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn quote_cards_move_by_row_down_and_by_card_across() {
+    let quote = scenario(TickKind::Quote, &[], &[]);
+    // Two cards across and one row of them at a time.
+    let (columns, rows) = (62, 10);
+    let start = text(&render_keys(&quote, columns, rows, Vec::new()).await);
+    assert!(start.contains("1–2/5"), "{start}");
+    assert!(
+        start.contains("700.HK") && start.contains("AAPL.US"),
+        "{start}"
+    );
+
+    let across = text(&render_keys(&quote, columns, rows, vec![KeyCode::Char('l')]).await);
+    assert!(across.contains("1–2/5"), "{across}");
+
+    let down = text(&render_keys(&quote, columns, rows, vec![KeyCode::Char('j')]).await);
+    assert!(down.contains("3–4/5"), "{down}");
+    assert!(
+        down.contains("TSLA.US") && down.contains("NVDA.US"),
+        "{down}"
+    );
+
+    let last = text(&render_keys(&quote, columns, rows, vec![KeyCode::Char('j'); 3]).await);
+    assert!(last.contains("5–5/5"), "{last}");
+    assert!(last.contains("9988.HK"), "{last}");
 }
 
 fn row(cells: &[Vec<String>], row: usize) -> String {
@@ -598,7 +899,7 @@ async fn a_panel_narrower_than_the_minimum_scrolls_over_the_minimum_layout() {
     let watchlist = scenario(TickKind::Watchlist, &[], &[]);
     let minimum = watchlist.minimum().columns;
     let canvas = render(&watchlist, minimum, ROWS - 1).await;
-    for columns in [40, 30] {
+    for columns in BELOW_MINIMUM {
         let largest = usize::from(minimum - columns);
         let start = render(&watchlist, columns, ROWS).await;
         assert_slice(&start, &canvas, 0, "before scrolling");
@@ -625,7 +926,8 @@ async fn a_panel_narrower_than_the_minimum_scrolls_over_the_minimum_layout() {
 #[tokio::test(start_paused = true)]
 async fn the_viewport_reveals_the_kline_cursor_and_keeps_a_manual_scroll() {
     let kline = scenario(TickKind::Kline, &[], &[]);
-    let columns = 30;
+    // The cursor sits on the newest candle, past the right edge of this Panel.
+    let columns = BELOW_MINIMUM[1];
     let start = text(&render(&kline, columns, ROWS).await);
     assert!(start.contains('▲'), "{start}");
     let indicator = start.lines().last().unwrap();
@@ -721,7 +1023,7 @@ async fn scroll_keys_reach_the_tick_when_the_panel_fits_or_an_editor_owns_the_ke
 #[tokio::test(start_paused = true)]
 async fn the_help_overlay_lists_the_scroll_keys_while_the_panel_scrolls() {
     let help = scenario(TickKind::Quote, &[KeyCode::Char('?')], &[]);
-    let scrolling = text(&render(&help, 40, ROWS).await);
+    let scrolling = text(&render(&help, BELOW_MINIMUM[0], ROWS).await);
     assert!(scrolling.contains("< / >  Scroll"), "{scrolling}");
     let fitting = text(&render(&help, LAPTOP.0, LAPTOP.1).await);
     assert!(!fitting.contains("Scroll"), "{fitting}");

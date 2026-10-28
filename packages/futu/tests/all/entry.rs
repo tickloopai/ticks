@@ -73,7 +73,7 @@ fn describe_lists_only_the_options_tick() {
     assert_eq!(options["recover_with"], "chain");
     assert_eq!(
         options["minimum_panel_size"],
-        serde_json::json!({"columns":58,"rows":14})
+        serde_json::json!({"columns":30,"rows":14})
     );
 }
 

@@ -123,6 +123,16 @@ pub async fn run_once(
 
 pub struct QuoteView {
     pub quotes: Vec<Quote>,
+    cards: crate::quote_cards::CardGrid,
+}
+
+impl QuoteView {
+    pub fn new(quotes: Vec<Quote>) -> Self {
+        Self {
+            quotes,
+            cards: Default::default(),
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -136,27 +146,31 @@ impl crate::runtime::LiveView for QuoteView {
     fn priority(&self) -> &[usize] {
         &[0, 2, 4, 1, 3, 12, 9, 8, 5, 6, 7, 10, 11]
     }
+    fn help(&self) -> &'static str {
+        "q / Ctrl+C  Quit\n?  Help\nj / k / Ctrl+N / Ctrl+P / ↓ / ↑  Card below / above\nh / l / ← / →  Previous / next card\nPageUp / PageDown  Page\ng / G  First / last"
+    }
+    async fn on_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+        _api: &QuoteServices,
+        state: &mut crate::runtime::ViewState,
+    ) -> Result<bool> {
+        use crossterm::event::KeyCode;
+        let key = match key {
+            KeyCode::Left => KeyCode::Char('h'),
+            KeyCode::Right => KeyCode::Char('l'),
+            key => key,
+        };
+        Ok(self.cards.move_selection(key, self.quotes.len(), state))
+    }
     fn draw(
         &self,
         frame: &mut ratatui::Frame<'_>,
         state: &mut crate::runtime::ViewState,
         settings: &Settings,
     ) {
-        let mut table = self.table();
-        for (row, quote) in table.rows.iter_mut().zip(&self.quotes) {
-            if quote.error.is_some() {
-                row[0] = json!(format!("! {}", quote.symbol));
-                row[2] = json!("Error");
-            }
-        }
-        crate::runtime::draw_table(
-            frame,
-            &self.title(),
-            &table,
-            self.priority(),
-            state,
-            settings,
-        );
+        self.cards
+            .draw(frame, &self.title(), &self.quotes, &[], state, settings);
     }
     fn on_market(&mut self, event: &tick_provider::api::MarketEvent) {
         for quote in &mut self.quotes {
@@ -201,7 +215,7 @@ pub async fn run_live<
             return Ok(());
         }
         crate::runtime::run(
-            &mut QuoteView { quotes },
+            &mut QuoteView::new(quotes),
             api,
             settings,
             terminal,

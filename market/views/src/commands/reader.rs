@@ -6,7 +6,7 @@ use ratatui::{
     Frame, Terminal,
     backend::Backend,
     layout::Rect,
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -35,6 +35,8 @@ use tick_provider::{
 };
 use tick_sdk::{stream::TickStream, tools::ToolCall};
 
+/// The prose rows a short Panel keeps below a wrapped document heading.
+const MINIMUM_BODY_ROWS: u16 = 3;
 const FOOTER_SEPARATOR: &str = "  ";
 
 #[derive(Deserialize, JsonSchema)]
@@ -850,10 +852,7 @@ impl LiveView for ReaderView {
             let text = format!(
                 "{context}\n\n{state}\n\nR retry matched materials · o open another original\na ask Chat about this event"
             );
-            frame.render_widget(
-                Paragraph::new(text).wrap(ratatui::widgets::Wrap { trim: false }),
-                inner,
-            );
+            frame.render_widget(Paragraph::new(text).wrap(Wrap { trim: false }), inner);
             if let Some(editor) = &self.editor {
                 let line = Rect::new(inner.x, inner.bottom() - 1, inner.width, 1);
                 frame.render_widget(ratatui::widgets::Clear, line);
@@ -889,15 +888,22 @@ impl LiveView for ReaderView {
             document.published_at.as_deref().unwrap_or("unknown"),
             &document.revision[..12]
         );
+        // A narrow Panel wraps the document's title and dates instead of cutting them.
+        let header = Paragraph::new(header)
+            .style(styles.text)
+            .wrap(Wrap { trim: false });
+        let header_rows = u16::try_from(header.line_count(inner.width))
+            .unwrap_or(u16::MAX)
+            .min(inner.height.saturating_sub(1 + MINIMUM_BODY_ROWS));
         frame.render_widget(
-            Paragraph::new(header).style(styles.text),
-            Rect::new(inner.x, inner.y, inner.width, 3),
+            header,
+            Rect::new(inner.x, inner.y, inner.width, header_rows),
         );
         let body = Rect::new(
             inner.x,
-            inner.y + 3,
+            inner.y + header_rows,
             inner.width,
-            inner.height.saturating_sub(4),
+            inner.height.saturating_sub(header_rows + 1),
         );
         self.page_size.set(body.height.max(1) as usize);
         if self.mode != ReaderMode::Reading {

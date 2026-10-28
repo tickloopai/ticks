@@ -611,6 +611,100 @@ impl EarningsView {
         Ok(())
     }
 
+    /// The upcoming period's preparation; a `compact` table names each row and status in
+    /// fewer words for a narrow Panel.
+    fn upcoming_table(&self, compact: bool) -> TableData {
+        let label =
+            |full: &'static str, short: &'static str| json!(if compact { short } else { full });
+        TableData {
+            headers: vec!["Preparation", "Available value"],
+            rows: self
+                .table
+                .upcoming
+                .as_ref()
+                .map(|period| {
+                    vec![
+                        vec![label("Fiscal period", "Period"), json!(period.period_id)],
+                        vec![
+                            label("Status", "Status"),
+                            label("Awaiting provider actuals", "Awaiting actuals"),
+                        ],
+                        vec![
+                            label("Confirmed period release date", "Release"),
+                            json!(period.release_date),
+                        ],
+                        vec![
+                            label("Release session", "Session"),
+                            json!(period.release_session),
+                        ],
+                        vec![
+                            label("EPS estimate (queried now)", "EPS est."),
+                            json!(period.eps_estimate),
+                        ],
+                        vec![
+                            label("Revenue estimate (queried now)", "Rev est."),
+                            json!(period.revenue_estimate),
+                        ],
+                        vec![
+                            label("Historical pre-release snapshot", "Snapshot"),
+                            label("Not available", "Not available"),
+                        ],
+                        vec![
+                            label("Original", "Original"),
+                            label(
+                                "Awaiting a period-matched issuer release",
+                                "Awaiting release",
+                            ),
+                        ],
+                    ]
+                })
+                .unwrap_or_else(|| {
+                    vec![vec![
+                        label("Upcoming fiscal period", "Upcoming"),
+                        label(
+                            "Provider has not identified an unreleased fiscal period",
+                            "Not identified",
+                        ),
+                    ]]
+                }),
+        }
+    }
+
+    fn mode_label(&self) -> &str {
+        match self.mode {
+            EarningsMode::Comparison => "Compare periods",
+            EarningsMode::Detail => self
+                .table
+                .rows
+                .get(self.selected_period)
+                .map(|row| row.period_id.as_str())
+                .unwrap_or("No period"),
+            EarningsMode::Reactions => "Market reactions",
+            EarningsMode::Filings => "Period originals · metadata matched",
+            EarningsMode::Upcoming => "Upcoming earnings · preparing",
+        }
+    }
+
+    /// The title that fits `columns`: the full one, else the symbol and mode alone, else the
+    /// symbol and the mode's own name without its qualifier.
+    fn panel_title(&self, columns: usize, ambiguous: AmbiguousWidth) -> String {
+        let label = self.mode_label();
+        let candidates = [
+            self.title(),
+            format!("{} · {label}", self.table.symbol),
+            format!(
+                "{} · {}",
+                self.table.symbol,
+                label.split(INFO_SEPARATOR).next().unwrap_or(label)
+            ),
+        ];
+        let fitting = candidates
+            .iter()
+            .position(|title| width(title, ambiguous) <= columns)
+            .unwrap_or(candidates.len() - 1);
+        candidates[fitting].clone()
+    }
+
     fn draw_prompt(&self, frame: &mut Frame<'_>, settings: &Settings, prompt: &SymbolPrompt) {
         let area = frame.area();
         if area.height < 2 {
@@ -624,11 +718,25 @@ impl EarningsView {
         let label_width = tickloop_ui::format::width(label, settings.ambiguous_width);
         let available = (line.width as usize).saturating_sub(label_width);
         let (visible, cursor) = prompt.input.viewport(available, settings.ambiguous_width);
-        let suffix = prompt
-            .error
-            .as_deref()
-            .unwrap_or("Enter apply · Ctrl+C cancel");
-        let text = format!("{label}{visible} · {suffix}");
+        let entered = format!("{label}{visible}");
+        let room = (line.width as usize).saturating_sub(
+            width(&entered, settings.ambiguous_width)
+                + width(INFO_SEPARATOR, settings.ambiguous_width),
+        );
+        let suffix = match prompt.error.as_deref() {
+            Some(error) => error.to_owned(),
+            None => fit_hints(
+                &[Hint::whole("Enter apply"), Hint::whole("Ctrl+C cancel")],
+                INFO_SEPARATOR,
+                room,
+                settings.ambiguous_width,
+            ),
+        };
+        let text = if suffix.is_empty() {
+            entered
+        } else {
+            format!("{entered}{INFO_SEPARATOR}{suffix}")
+        };
         if available > 0 {
             frame.set_cursor_position((line.x + (label_width + cursor) as u16, line.y));
         }
@@ -715,19 +823,7 @@ impl LiveView for EarningsView {
         crate::metadata::TickKind::Earnings
     }
     fn title(&self) -> String {
-        let label = match self.mode {
-            EarningsMode::Comparison => "Compare periods",
-            EarningsMode::Detail => self
-                .table
-                .rows
-                .get(self.selected_period)
-                .map(|row| row.period_id.as_str())
-                .unwrap_or("No period"),
-            EarningsMode::Reactions => "Market reactions",
-            EarningsMode::Filings => "Period originals · metadata matched",
-            EarningsMode::Upcoming => "Upcoming earnings · preparing",
-        };
-        format!("{} · {label}", earnings::title(&self.table))
+        format!("{} · {}", earnings::title(&self.table), self.mode_label())
     }
     fn table(&self) -> TableData {
         match self.mode {
@@ -756,46 +852,7 @@ impl LiveView for EarningsView {
                     })
                     .collect(),
             },
-            EarningsMode::Upcoming => TableData {
-                headers: vec!["Preparation", "Available value"],
-                rows: self
-                    .table
-                    .upcoming
-                    .as_ref()
-                    .map(|period| {
-                        vec![
-                            vec![json!("Fiscal period"), json!(period.period_id)],
-                            vec![json!("Status"), json!("Awaiting provider actuals")],
-                            vec![
-                                json!("Confirmed period release date"),
-                                json!(period.release_date),
-                            ],
-                            vec![json!("Release session"), json!(period.release_session)],
-                            vec![
-                                json!("EPS estimate (queried now)"),
-                                json!(period.eps_estimate),
-                            ],
-                            vec![
-                                json!("Revenue estimate (queried now)"),
-                                json!(period.revenue_estimate),
-                            ],
-                            vec![
-                                json!("Historical pre-release snapshot"),
-                                json!("Not available"),
-                            ],
-                            vec![
-                                json!("Original"),
-                                json!("Awaiting a period-matched issuer release"),
-                            ],
-                        ]
-                    })
-                    .unwrap_or_else(|| {
-                        vec![vec![
-                            json!("Upcoming fiscal period"),
-                            json!("Provider has not identified an unreleased fiscal period"),
-                        ]]
-                    }),
-            },
+            EarningsMode::Upcoming => self.upcoming_table(false),
         }
     }
     fn content(&self) -> serde_json::Value {
@@ -1034,15 +1091,24 @@ impl LiveView for EarningsView {
         ) {
             state.selected = self.selected_period;
         }
-        crate::runtime::draw_table(
-            frame,
-            &self.title(),
-            &self.table(),
-            self.priority(),
-            state,
-            settings,
-        );
         let area = frame.area();
+        let content_columns = crate::runtime::table_content_area(area).width as usize;
+        let title = self.panel_title(content_columns, settings.ambiguous_width);
+        let mut table = self.table();
+        if self.mode == EarningsMode::Upcoming {
+            // Labels that would take more than half the row read better in fewer words.
+            let widest_label = table
+                .rows
+                .iter()
+                .filter_map(|row| row.first()?.as_str())
+                .map(|label| width(label, settings.ambiguous_width))
+                .max()
+                .unwrap_or(0);
+            if widest_label > content_columns.saturating_sub(2) / 2 {
+                table = self.upcoming_table(true);
+            }
+        }
+        crate::runtime::draw_table(frame, &title, &table, self.priority(), state, settings);
         if area.height >= 10 {
             let styles = settings.styles();
             let observed = self
@@ -1065,20 +1131,18 @@ impl LiveView for EarningsView {
                         .map(|item| item.dataset)
                         .collect::<Vec<_>>()
                         .join(", ");
-                    let mut facts = vec![
-                        source.to_owned(),
-                        observed.to_owned(),
-                        "estimates not archived".to_owned(),
-                    ];
+                    let mut facts = vec![source.to_owned(), observed.to_owned()];
                     if !missing.is_empty() {
                         facts.push(format!("unavailable: {missing}"));
                     }
+                    facts.push("estimates not archived".to_owned());
                     (facts, &[])
                 }
                 EarningsMode::Filings => (
                     vec![
                         source.to_owned(),
-                        "filename metadata matched; body not verified".to_owned(),
+                        "filename metadata matched".to_owned(),
+                        "body not verified".to_owned(),
                     ],
                     &[Hint::whole("Enter opens original")],
                 ),
@@ -1086,8 +1150,8 @@ impl LiveView for EarningsView {
                     vec![
                         source.to_owned(),
                         observed.to_owned(),
-                        "awaiting actuals".to_owned(),
                         format!("refresh {}s", self.refresh_in.as_secs()),
+                        "awaiting actuals".to_owned(),
                     ],
                     &[Hint::whole("R refresh")],
                 ),
@@ -1129,15 +1193,26 @@ fn observed_label(observed_at: &str) -> String {
         .unwrap_or_else(|| observed_at.to_owned())
 }
 
-/// Joins the facts, truncating them only when they alone overflow, then the key hints that
-/// still fit whole; the help overlay lists every key the line drops.
+/// Joins the facts, then the key hints that still fit whole; the help overlay lists every key
+/// the line drops. Facts too many for the line drop from the first, so the last one, the
+/// caveat, stays; only a last fact that alone overflows truncates.
 fn info_line(
     facts: &[String],
     hints: &[Hint<'_>],
     columns: usize,
     ambiguous: AmbiguousWidth,
 ) -> String {
-    let facts = truncate(&facts.join(INFO_SEPARATOR), columns, ambiguous);
+    let mut first_kept = 0;
+    while first_kept + 1 < facts.len()
+        && width(&facts[first_kept..].join(INFO_SEPARATOR), ambiguous) > columns
+    {
+        first_kept += 1;
+    }
+    let facts = truncate(
+        &facts[first_kept..].join(INFO_SEPARATOR),
+        columns,
+        ambiguous,
+    );
     let room = columns.saturating_sub(width(&facts, ambiguous) + width(INFO_SEPARATOR, ambiguous));
     let keys = fit_hints(hints, INFO_SEPARATOR, room, ambiguous);
     if keys.is_empty() {
@@ -1180,8 +1255,10 @@ mod info_line_tests {
     use super::{info_line, observed_label};
     use tickloop_ui::{format::Hint, settings::AmbiguousWidth};
 
-    /// The narrowest panel is 62 columns, 60 inside its padding.
-    const NARROWEST_CONTENT: usize = 60;
+    /// The panel the full detail line was laid out for: 62 columns, 60 inside its padding.
+    const DETAIL_CONTENT: usize = 60;
+    /// The narrowest panel is 30 columns, 28 inside its padding.
+    const NARROWEST_CONTENT: usize = 28;
 
     #[test]
     fn a_detail_line_keeps_its_caveat_whole_at_the_narrowest_panel() {
@@ -1193,11 +1270,12 @@ mod info_line_tests {
             observed,
             "estimates not archived".to_owned(),
         ];
-        let line = info_line(&facts, &[], NARROWEST_CONTENT, AmbiguousWidth::Narrow);
+        let line = |columns| info_line(&facts, &[], columns, AmbiguousWidth::Narrow);
         assert_eq!(
-            line,
+            line(DETAIL_CONTENT),
             "Longbridge · 2026-10-16 03:30 UTC · estimates not archived"
         );
+        assert_eq!(line(NARROWEST_CONTENT), "estimates not archived");
         assert_eq!(
             observed_label("2026-10-16T11:30:00+08:00"),
             "2026-10-16 03:30 UTC"
@@ -1206,7 +1284,7 @@ mod info_line_tests {
     }
 
     #[test]
-    fn key_hints_drop_whole_while_facts_truncate_only_when_they_alone_overflow() {
+    fn key_hints_drop_whole_while_facts_drop_from_the_first_and_the_last_alone_truncates() {
         let facts = ["Demo".to_owned(), "2026-10-10T06:00:00Z".to_owned()];
         let hints = [Hint::whole("Enter detail"), Hint::whole("c compare")];
         let line = |columns| info_line(&facts, &hints, columns, AmbiguousWidth::Narrow);
@@ -1217,6 +1295,7 @@ mod info_line_tests {
         );
         assert_eq!(line(50), "Demo · 2026-10-10T06:00:00Z · Enter detail");
         assert_eq!(line(30), "Demo · 2026-10-10T06:00:00Z");
-        assert_eq!(line(12), "Demo · 2026…");
+        assert_eq!(line(24), "2026-10-10T06:00:00Z");
+        assert_eq!(line(12), "2026-10-10T…");
     }
 }

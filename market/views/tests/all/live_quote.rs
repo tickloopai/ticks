@@ -279,7 +279,6 @@ async fn minimum_quote_panel_keeps_symbol_price_and_percentage_visible() {
         .collect();
     assert!(
         screen.contains("TSLA.US")
-            && screen.contains("Tesla")
             && screen.contains("100")
             && screen.contains("11.11%")
             && !screen.contains("scroll"),

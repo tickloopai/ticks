@@ -31,12 +31,24 @@ use tick_provider::{
     options::OptionsApi,
 };
 use tick_sdk::{stream::TickStream, tools::ToolCall};
+use tickloop_ui::format::Hint;
 
 const REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 const SNAPSHOT_TOOL: &str = "snapshot";
 const EXPIRATIONS_TOOL: &str = "expirations";
 const EVENT_HISTORY_TOOL: &str = "event_history";
 const TABLE_HEADER_ROWS: u16 = 1;
+/// The narrowest Panel that holds the strike, both bid/ask pairs and both IVs; a narrower one
+/// shows the compact chain of midpoints and a two-line summary.
+const FULL_CHAIN_COLUMNS: u16 = 58;
+const COMPACT_HEADERS: [&str; 5] = ["Strike", "C mid", "P mid", "C IV%", "P IV%"];
+/// The strike and both midpoints, which the compact chain always shows.
+const MIDPOINT_COLUMNS: usize = 3;
+const PRICING_NOTE: &str =
+    "No last-price substitution; bid/ask midpoint is a pricing approximation.";
+/// The highlight symbol before the selected row, and the gap between table columns.
+const HIGHLIGHT_COLUMNS: u16 = 2;
+const COLUMN_SPACING: u16 = 1;
 const HEADERS: &[&str] = &[
     "Strike",
     "Call bid/ask",
@@ -49,6 +61,13 @@ const HEADERS: &[&str] = &[
     "P volume",
 ];
 type CurrentSnapshot = Arc<RwLock<Option<OptionsSnapshot>>>;
+
+/// The chain table as drawn: its headers, cell text and column widths.
+struct Chain {
+    headers: Vec<&'static str>,
+    cells: Vec<Vec<String>>,
+    widths: Vec<Constraint>,
+}
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -212,6 +231,77 @@ fn amount(value: Option<f64>) -> String {
     value
         .map(|value| format!("{value:.2}"))
         .unwrap_or_else(|| "—".into())
+}
+
+/// The compact chain: strike and both midpoints, then both IVs as a pair while they fit
+/// `columns`; the details still give each bid and ask.
+fn compact_chain(snapshot: &OptionsSnapshot, columns: u16) -> Chain {
+    let rows: Vec<[String; 5]> = snapshot
+        .rows
+        .iter()
+        .map(|pair| {
+            let call = pair.call.as_ref().and_then(|leg| leg.quote.as_ref());
+            let put = pair.put.as_ref().and_then(|leg| leg.quote.as_ref());
+            [
+                json!(pair.strike).to_string(),
+                amount(call.and_then(|quote| quote.midpoint())),
+                amount(put.and_then(|quote| quote.midpoint())),
+                amount(call.and_then(|quote| quote.implied_volatility_percent)),
+                amount(put.and_then(|quote| quote.implied_volatility_percent)),
+            ]
+        })
+        .collect();
+    let widths: Vec<u16> = (0..COMPACT_HEADERS.len())
+        .map(|index| {
+            rows.iter()
+                .map(|row| row[index].chars().count())
+                .chain([COMPACT_HEADERS[index].len()])
+                .max()
+                .unwrap_or(0) as u16
+        })
+        .collect();
+    let needed =
+        HIGHLIGHT_COLUMNS + widths.iter().sum::<u16>() + COLUMN_SPACING * (widths.len() as u16 - 1);
+    let shown = if needed <= columns {
+        COMPACT_HEADERS.len()
+    } else {
+        MIDPOINT_COLUMNS
+    };
+    Chain {
+        headers: COMPACT_HEADERS[..shown].to_vec(),
+        cells: rows.into_iter().map(|row| row[..shown].to_vec()).collect(),
+        widths: widths[..shown]
+            .iter()
+            .map(|&width| Constraint::Length(width))
+            .collect(),
+    }
+}
+
+/// The snapshot in two lines for a narrow Panel: the spot and the ATM move, then when it was
+/// observed, to the minute in UTC.
+fn compact_description(snapshot: &OptionsSnapshot) -> String {
+    let observed = time::OffsetDateTime::parse(
+        &snapshot.observed_at,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .ok()
+    .and_then(|observed| {
+        observed
+            .to_offset(time::UtcOffset::UTC)
+            .format(time::macros::format_description!(
+                "[year]-[month]-[day] [hour]:[minute]Z"
+            ))
+            .ok()
+    })
+    .unwrap_or_else(|| snapshot.observed_at.clone());
+    let estimate = snapshot.atm.as_ref().map_or_else(
+        || "ATM move n/a".to_owned(),
+        |atm| format!("ATM ±{:.2}%", atm.move_percent),
+    );
+    format!(
+        "Spot {} · {estimate}\nObserved {observed}",
+        amount(snapshot.underlying.last)
+    )
 }
 
 pub async fn run_once(
@@ -393,6 +483,30 @@ impl OptionsView {
         })
     }
 
+    /// The title that fits `columns`: the full one, else without the word Options, else the
+    /// symbol and expiry alone.
+    fn panel_title(&self, columns: u16, settings: &Settings) -> String {
+        let title = self.title();
+        if self.research.is_some() {
+            return title;
+        }
+        let candidates = [
+            title,
+            format!(
+                "{} · {} · {}",
+                self.snapshot.symbol, self.snapshot.expiry, self.snapshot.source
+            ),
+            format!("{} · {}", self.snapshot.symbol, self.snapshot.expiry),
+        ];
+        let fitting = candidates
+            .iter()
+            .position(|title| {
+                tickloop_ui::format::width(title, settings.ambiguous_width) <= usize::from(columns)
+            })
+            .unwrap_or(candidates.len() - 1);
+        candidates[fitting].clone()
+    }
+
     fn detail_text(&self, selected: usize) -> String {
         if let Some(history) = &self.history {
             return history
@@ -447,6 +561,17 @@ impl OptionsView {
                 lines.push(format!("{label}: contract missing or ambiguous"));
             }
         }
+        lines.push(format!(
+            "\nSpot {} · quote {} ({})\n{}",
+            amount(snapshot.underlying.last),
+            snapshot
+                .underlying
+                .quote_time
+                .as_deref()
+                .unwrap_or("missing"),
+            snapshot.quote_time_zone,
+            estimate_text(snapshot)
+        ));
         lines.push(format!("\nObserved {} UTC", snapshot.observed_at));
         lines.push("\nATM approximation uses both bid-ask midpoints, divided by underlying last. Quote times may differ; no freshness guarantee. This is not a direction forecast or probability interval.".into());
         lines.join("\n")
@@ -697,6 +822,7 @@ impl LiveView for OptionsView {
         let area = frame.area();
         let styles = settings.styles();
         frame.buffer_mut().set_style(area, styles.panel_base());
+        let compact = area.width < FULL_CHAIN_COLUMNS;
         let description = if let Some(history) = &self.history {
             format!(
                 "Local saved snapshots: {} · {}\n{}",
@@ -716,6 +842,10 @@ impl LiveView for OptionsView {
                     )
                 }
             )
+        } else if let Some(snapshot) = self.shown_snapshot()
+            && compact
+        {
+            compact_description(snapshot)
         } else if let Some(snapshot) = self.shown_snapshot() {
             format!(
                 "Spot {} · quote {} ({})\n{}\nObserved {}",
@@ -751,9 +881,35 @@ impl LiveView for OptionsView {
         let description = Paragraph::new(description)
             .style(styles.text)
             .wrap(Wrap { trim: false });
-        let description_rows = if self.research.is_some() { 5 } else { 3 }
-            .max(u16::try_from(description.line_count(body.width)).unwrap_or(u16::MAX));
-        let note=self.notice.as_deref().unwrap_or(if self.research.is_some() { "b before · p after · c current · a Ask Chat · Enter details\ns save CURRENT · r refresh current · h event history · Backspace back" } else { "[ ] expiry · Enter details · r refresh · s save · h history · Backspace back\nNo last-price substitution; bid/ask midpoint is a pricing approximation." });
+        let description_rows = if self.research.is_some() {
+            5
+        } else if compact {
+            2
+        } else {
+            3
+        }
+        .max(u16::try_from(description.line_count(body.width)).unwrap_or(u16::MAX));
+        let note = match self.notice.as_deref() {
+            Some(notice) => notice.to_owned(),
+            None if self.research.is_some() => "b before · p after · c current · a Ask Chat · Enter details\ns save CURRENT · r refresh current · h event history · Backspace back".to_owned(),
+            None if !compact => format!("[ ] expiry · Enter details · r refresh · s save · h history · Backspace back\n{PRICING_NOTE}"),
+            None => {
+                let keys = tickloop_ui::format::fit_hints(
+                    &[
+                        Hint::whole("[ ] expiry"),
+                        Hint::new("Enter details", "Enter"),
+                        Hint::whole("r refresh"),
+                        Hint::whole("s save"),
+                        Hint::whole("h history"),
+                        Hint::whole("Backspace back"),
+                    ],
+                    " · ",
+                    usize::from(body.width),
+                    settings.ambiguous_width,
+                );
+                format!("{keys}\n{PRICING_NOTE}")
+            }
+        };
         let note = Paragraph::new(note)
             .style(styles.muted_text)
             .wrap(Wrap { trim: false });
@@ -766,7 +922,8 @@ impl LiveView for OptionsView {
         ])
         .split(body);
         frame.render_widget(
-            Paragraph::new(self.title()).style(styles.panel_base().patch(styles.title)),
+            Paragraph::new(self.panel_title(area.width, settings))
+                .style(styles.panel_base().patch(styles.title)),
             parts[0],
         );
         frame.render_widget(description, parts[1]);
@@ -800,20 +957,35 @@ impl LiveView for OptionsView {
                 })
                 .collect()
         };
-        let rows = table.rows.iter().map(|row| {
-            Row::new(
-                row.iter()
-                    .take(columns)
-                    .map(|value| match value {
-                        Value::Null => "—".into(),
-                        Value::String(text) => text.clone(),
-                        _ => value.to_string(),
+        let Chain {
+            headers,
+            cells,
+            widths,
+        } = self
+            .shown_snapshot()
+            .filter(|_| compact && self.history.is_none())
+            .map(|snapshot| compact_chain(snapshot, parts[2].width))
+            .unwrap_or_else(|| Chain {
+                headers: table.headers.iter().take(columns).copied().collect(),
+                cells: table
+                    .rows
+                    .iter()
+                    .map(|row| {
+                        row.iter()
+                            .take(columns)
+                            .map(|value| match value {
+                                Value::Null => "—".into(),
+                                Value::String(text) => text.clone(),
+                                _ => value.to_string(),
+                            })
+                            .collect()
                     })
-                    .collect::<Vec<String>>(),
-            )
-        });
-        let widget = Table::new(rows, widths)
-            .header(Row::new(table.headers.iter().take(columns).copied()).style(styles.muted_text))
+                    .collect(),
+                widths,
+            });
+        let widget = Table::new(cells.into_iter().map(Row::new), widths)
+            .column_spacing(COLUMN_SPACING)
+            .header(Row::new(headers).style(styles.muted_text))
             .row_highlight_style(styles.selection)
             .highlight_symbol("› ");
         let mut table_state = TableState::default().with_selected(Some(state.selected));
@@ -836,7 +1008,11 @@ impl LiveView for OptionsView {
                     .scroll((self.detail_scroll, 0))
                     .block(
                         Block::default()
-                            .title(" Contract / saved snapshot · Backspace back ")
+                            .title(if compact {
+                                " Contract · Backspace back "
+                            } else {
+                                " Contract / saved snapshot · Backspace back "
+                            })
                             .borders(Borders::ALL)
                             .border_style(styles.border),
                     ),

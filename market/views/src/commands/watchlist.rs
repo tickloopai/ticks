@@ -27,6 +27,7 @@ pub struct WatchlistView {
     pub quotes: Vec<Quote>,
     pub market_states: Vec<MarketState>,
     pub subscriptions: Vec<String>,
+    cards: crate::quote_cards::CardGrid,
 }
 
 impl WatchlistView {
@@ -72,17 +73,7 @@ impl WatchlistView {
     fn display_table(&self) -> TableData {
         let mut table = self.table();
         for (row, quote) in table.rows.iter_mut().zip(&self.quotes) {
-            let status = self
-                .market_states
-                .iter()
-                .find(|state| Some(state.market.as_str()) == symbol_market(&quote.symbol))
-                .map_or(MarketStatus::Unknown, |state| state.status);
-            let glyph = match status {
-                MarketStatus::Pre => MARKET_PRE_GLYPH,
-                MarketStatus::Open => MARKET_OPEN_GLYPH,
-                MarketStatus::Closed => MARKET_CLOSED_GLYPH,
-                MarketStatus::Unknown => "?",
-            };
+            let glyph = self.market_glyph(quote);
             if quote.error.is_some() {
                 row[0] = json!(format!("! {}", quote.symbol));
                 row[2] = json!("Error");
@@ -91,6 +82,21 @@ impl WatchlistView {
             }
         }
         table
+    }
+
+    /// The glyph of the trading state of the market `quote` trades in.
+    fn market_glyph(&self, quote: &Quote) -> &'static str {
+        let status = self
+            .market_states
+            .iter()
+            .find(|state| Some(state.market.as_str()) == symbol_market(&quote.symbol))
+            .map_or(MarketStatus::Unknown, |state| state.status);
+        match status {
+            MarketStatus::Pre => MARKET_PRE_GLYPH,
+            MarketStatus::Open => MARKET_OPEN_GLYPH,
+            MarketStatus::Closed => MARKET_CLOSED_GLYPH,
+            MarketStatus::Unknown => "?",
+        }
     }
 }
 
@@ -167,6 +173,7 @@ async fn group_view(group: Option<&str>, api: &QuoteServices) -> Result<Watchlis
         quotes,
         market_states,
         subscriptions: Vec::new(),
+        cards: Default::default(),
     })
 }
 
@@ -272,6 +279,9 @@ impl crate::runtime::LiveView for WatchlistView {
         state: &mut crate::runtime::ViewState,
     ) -> Result<bool> {
         use crossterm::event::KeyCode;
+        if self.cards.move_selection(key, self.quotes.len(), state) {
+            return Ok(true);
+        }
         let forward = match key {
             KeyCode::Right | KeyCode::Char(']') => true,
             KeyCode::Left | KeyCode::Char('[') => false,
@@ -353,7 +363,7 @@ impl crate::runtime::LiveView for WatchlistView {
     }
 
     fn help(&self) -> &'static str {
-        "q / Ctrl+C  Quit\n?  Help\nj / k / Ctrl+N / Ctrl+P / arrows  Move\nPageUp / PageDown  Page\ng / G  First / last\n[ / ] or Left / Right  Group\nMarket: ◌ Pre · ▶ Trading · ■ Closed\n? Unknown market status"
+        "q / Ctrl+C  Quit\n?  Help\nj / k / Ctrl+N / Ctrl+P / ↓ / ↑  Card below / above\nh / l  Previous / next card\nPageUp / PageDown  Page\ng / G  First / last\n[ / ] or ← / →  Group\nMarket: ◌ Pre · ▶ Trading · ■ Closed\n? Unknown market status"
     }
 
     fn draw(
@@ -362,16 +372,16 @@ impl crate::runtime::LiveView for WatchlistView {
         state: &mut crate::runtime::ViewState,
         settings: &Settings,
     ) {
-        let mut table = self.display_table();
-        table.headers.push("Error");
-        for (row, quote) in table.rows.iter_mut().zip(&self.quotes) {
-            row.push(json!(quote.error));
-        }
-        crate::runtime::draw_table(
+        let markers: Vec<&str> = self
+            .quotes
+            .iter()
+            .map(|quote| self.market_glyph(quote).trim_end())
+            .collect();
+        self.cards.draw(
             frame,
             &self.title(),
-            &table,
-            self.priority(),
+            &self.quotes,
+            &markers,
             state,
             settings,
         );

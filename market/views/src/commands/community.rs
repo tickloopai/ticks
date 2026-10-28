@@ -34,6 +34,9 @@ use tick_provider::{
 use tick_sdk::{stream::TickStream, tools::ToolCall};
 
 const HEADERS: &[&str] = &["Published At", "Kind", "Title", "Text", "Topic Id", "Url"];
+/// Below this many columns for the headline, the post kind gives its room to the headline; the
+/// open post still names its kind.
+const MINIMUM_HEADLINE_COLUMNS: usize = 22;
 const REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 /// A reply runs on the Panel's UI path, so it may hold the Panel only this long.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(15);
@@ -295,7 +298,7 @@ impl CommunityView {
                 frame.buffer_mut(),
                 inner.x,
                 inner.bottom() - 1,
-                "Backspace Back · j/k Scroll · q Quit",
+                &crate::runtime::reading_keys(inner.width as usize, settings),
                 inner.width as usize,
                 settings.ambiguous_width,
                 styles.muted_text,
@@ -413,8 +416,17 @@ impl LiveView for CommunityView {
         }
         let is_wide = inner.width >= 65;
         let time_width = if is_wide { 16 } else { 5 };
-        let kind_width = 7;
-        let text_width = (inner.width as usize).saturating_sub(time_width + kind_width + 4);
+        let mut kind_width = 7;
+        let mut text_width = (inner.width as usize).saturating_sub(time_width + kind_width + 4);
+        if text_width < MINIMUM_HEADLINE_COLUMNS {
+            kind_width = 0;
+            text_width = (inner.width as usize).saturating_sub(time_width + 2);
+        }
+        let time_header = if time_width < HEADERS[0].len() {
+            "Date"
+        } else {
+            HEADERS[0]
+        };
         let visible = inner.height.saturating_sub(2) as usize;
         self.page_size.set(visible.max(1));
         let posts = &self.feed.posts;
@@ -432,7 +444,7 @@ impl LiveView for CommunityView {
         {
             let values = match post {
                 None => [
-                    HEADERS[0].to_owned(),
+                    time_header.to_owned(),
                     HEADERS[1].to_owned(),
                     "Post".to_owned(),
                 ],
@@ -444,7 +456,11 @@ impl LiveView for CommunityView {
             };
             let style = if row == 0 { styles.title } else { Style::new() };
             let mut x = inner.x;
-            for (value, columns) in values.iter().zip([time_width, kind_width, text_width]) {
+            for (value, columns) in values
+                .iter()
+                .zip([time_width, kind_width, text_width])
+                .filter(|(_, columns)| *columns > 0)
+            {
                 write_text(
                     frame.buffer_mut(),
                     x,
@@ -479,7 +495,7 @@ impl LiveView for CommunityView {
             frame.buffer_mut(),
             inner.x,
             inner.bottom() - 1,
-            "Enter Read  ·  ? Help  ·  q Quit",
+            &crate::runtime::reading_list_keys(inner.width as usize, settings),
             inner.width as usize,
             settings.ambiguous_width,
             styles.muted_text,

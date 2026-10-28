@@ -35,6 +35,10 @@ pub enum TickConfigurationRequirement {
     UserInput,
 }
 
+/// The narrowest Panel every Tick lays out whole: the content of Tickloop's narrowest Monitor
+/// column, 32 columns less its `│ ` separator, which a Tick is shown in.
+pub const MINIMUM_PANEL_COLUMNS: u16 = 30;
+
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub struct MinimumPanelSize {
     pub columns: u16,
@@ -122,29 +126,33 @@ impl TickKind {
 
     /// The narrowest and shortest Panel that shows every key field of the Tick whole; a
     /// smaller Panel scrolls over a canvas of this size. The renderer reads this on every
-    /// frame, so it stays independent of the Tick Tool catalog.
+    /// frame, so it stays independent of the Tick Tool catalog. Every Tick is laid out for
+    /// [`MINIMUM_PANEL_COLUMNS`]; a narrower layout gives up its secondary fields first.
     pub fn minimum_panel_size(self) -> MinimumPanelSize {
-        let (columns, rows) = match self {
-            // Symbol, CJK name, price, change and change %.
-            Self::Quote => (52, 6),
-            // Symbol, name, price and change % beside the market-state marker.
-            Self::Watchlist => (44, 6),
-            // The two-line price summary and the full footer keys for three-digit prices.
-            Self::Kline => (45, 14),
-            // Symbol, quantity, price, value, P/L and P/L %.
-            Self::Positions => (49, 8),
-            // A headline of at least 19 columns beside the time and source.
-            Self::News => (40, 10),
-            // The detail mode's source time and estimate note, the widest Earnings line.
-            Self::Earnings => (62, 14),
-            // Strike, both bid/ask pairs and both IVs at their designed widths.
-            Self::Options => (58, 14),
-            // The document heading and wrapped prose.
-            Self::Reader => (40, 10),
-            // A post headline of at least 22 columns beside the date and kind.
-            Self::Community => (40, 10),
+        let rows = match self {
+            // Symbol, price and change %; the name gives way first.
+            Self::Quote => 6,
+            // Symbol, price and change % beside the market-state marker.
+            Self::Watchlist => 6,
+            // The price summary wrapped over four lines and the period, averages and live keys.
+            Self::Kline => 14,
+            // Symbol, P/L and P/L %; the price, quantity and value give way first.
+            Self::Positions => 8,
+            // A headline beside the time; the source gives way first.
+            Self::News => 10,
+            // The mode's caveat, and each table's leading two columns.
+            Self::Earnings => 14,
+            // Spot, ATM move, and strike with both midpoints.
+            Self::Options => 14,
+            // The wrapped document heading and prose.
+            Self::Reader => 10,
+            // A post headline beside the date; the post kind gives way first.
+            Self::Community => 10,
         };
-        MinimumPanelSize { columns, rows }
+        MinimumPanelSize {
+            columns: MINIMUM_PANEL_COLUMNS,
+            rows,
+        }
     }
 
     pub fn descriptor(self) -> TickDescriptor {

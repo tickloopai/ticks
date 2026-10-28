@@ -512,7 +512,7 @@ fn describe_lists_exactly_the_ticks_it_runs_with_their_minimum_panel_sizes() {
     let kline = descriptor("kline");
     assert_eq!(
         kline["minimum_panel_size"],
-        serde_json::json!({"columns":45,"rows":14})
+        serde_json::json!({"columns":30,"rows":14})
     );
     assert_eq!(kline["title"], "Kline");
     assert_eq!(kline["runtime"], "command");
@@ -551,7 +551,7 @@ fn describe_lists_exactly_the_ticks_it_runs_with_their_minimum_panel_sizes() {
     let earnings = descriptor("earnings");
     assert_eq!(
         earnings["minimum_panel_size"],
-        serde_json::json!({"columns":62,"rows":14})
+        serde_json::json!({"columns":30,"rows":14})
     );
     assert_eq!(earnings["title"], "Earnings");
     assert_eq!(earnings["runtime"], "command");

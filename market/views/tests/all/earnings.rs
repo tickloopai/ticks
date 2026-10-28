@@ -696,6 +696,9 @@ async fn an_entitlement_gap_fails_instead_of_printing_an_empty_table() {
     assert!(output.is_empty(), "no table is printed for a refusal");
 }
 
+/// The panel the full comparison and its source line were laid out for.
+const FULL_PANEL_COLUMNS: u16 = 62;
+
 async fn panel(api: &QuoteServices, columns: u16, rows: u16) -> String {
     use crossterm::event::{Event, KeyEvent, KeyModifiers};
     use ratatui::{Terminal, backend::TestBackend};
@@ -726,19 +729,34 @@ async fn panel(api: &QuoteServices, columns: u16, rows: u16) -> String {
 }
 
 #[tokio::test]
-async fn a_panel_below_the_minimum_size_scrolls_over_the_full_layout() {
+async fn a_panel_below_the_minimum_size_scrolls_over_the_minimum_layout() {
     let api = Fundamentals::new(time::OffsetDateTime::now_utc().date());
-    let screen = panel(&api, 61, 12).await;
+    let minimum = TickKind::Earnings.minimum_panel_size();
+    let screen = panel(&api, minimum.columns - 1, minimum.rows - 2).await;
 
     assert!(screen.contains("Compare periods"), "{screen}");
-    assert!(screen.contains("< > ↕ 1–11/14 { } scroll"), "{screen}");
+    // The indicator keeps its keys; the narrow Panel has no room left for the word.
+    assert!(screen.contains("< > ↕ 1–11/14 { }"), "{screen}");
 }
 
 #[tokio::test]
-async fn the_minimum_panel_draws_fiscal_comparisons_and_source_time() {
+async fn the_minimum_panel_draws_fiscal_comparisons_and_the_read_time() {
     let api = Fundamentals::new(time::OffsetDateTime::now_utc().date());
     let minimum = TickKind::Earnings.minimum_panel_size();
     let screen = panel(&api, minimum.columns, minimum.rows).await;
+
+    assert!(screen.contains("TSLA.US · Compare periods"), "{screen}");
+    for heading in ["Period", "EPS Act", "EPS YoY"] {
+        assert!(screen.contains(heading), "missing {heading}:\n{screen}");
+    }
+    assert!(screen.contains(" UTC"), "{screen}");
+    assert!(!screen.contains("scroll"), "{screen}");
+}
+
+#[tokio::test]
+async fn the_full_panel_draws_fiscal_comparisons_and_source_time() {
+    let api = Fundamentals::new(time::OffsetDateTime::now_utc().date());
+    let screen = panel(&api, FULL_PANEL_COLUMNS, 14).await;
 
     assert!(screen.contains("TSLA.US · Earnings"), "{screen}");
     for heading in ["Period", "EPS Act", "Revenue", "YoY"] {

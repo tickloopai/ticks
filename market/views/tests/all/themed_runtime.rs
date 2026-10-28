@@ -108,45 +108,60 @@ async fn screen(
     terminal
 }
 
+/// Where `symbol` first appears in the buffer.
+fn position_of(terminal: &Terminal<TestBackend>, symbol: &str) -> (u16, u16) {
+    let buffer = terminal.backend().buffer();
+    let index = buffer
+        .content
+        .iter()
+        .position(|cell| cell.symbol() == symbol)
+        .unwrap();
+    buffer.pos_of(index)
+}
+
 #[tokio::test]
 async fn injected_styles_cover_blank_panel_status_price_and_selection_modifiers() {
     let terminal = screen(100, 14, vec![KeyCode::Char('q')], settings()).await;
     let buffer = terminal.backend().buffer();
-    let blank = &buffer[(90, 6)];
+    let blank = &buffer[(90, 8)];
     assert_eq!(blank.bg, Color::Indexed(4));
     assert_eq!(blank.fg, Color::Indexed(3));
     assert_eq!(blank.modifier, Modifier::DIM | Modifier::ITALIC);
-    let selected = &buffer[(2, 3)];
+    let selected = &buffer[position_of(&terminal, "┌")];
     assert_eq!(selected.bg, Color::Indexed(5));
     assert_eq!(selected.fg, Color::Indexed(3));
     assert_eq!(selected.modifier, Modifier::ITALIC | Modifier::REVERSED);
-    assert_eq!(buffer[(10, 3)].bg, Color::Indexed(5));
-    assert_eq!(
-        buffer[(10, 3)].modifier,
-        Modifier::ITALIC | Modifier::REVERSED
-    );
-    let gain = buffer
-        .content
-        .iter()
-        .find(|cell| cell.symbol() == "+")
+    let (_, card_top) = position_of(&terminal, "┌");
+    let unselected = (0..100)
+        .rev()
+        .map(|column| &buffer[(column, card_top)])
+        .find(|cell| cell.symbol() == "┌")
         .unwrap();
+    assert_eq!(unselected.fg, Color::Indexed(9));
+    assert_eq!(unselected.bg, Color::Indexed(4));
+    let gain = &buffer[position_of(&terminal, "+")];
     assert_eq!(gain.fg, Color::Indexed(13));
-    assert_eq!(gain.bg, Color::Indexed(5));
+    assert_eq!(gain.bg, Color::Indexed(4));
     assert_eq!(
         gain.modifier,
-        Modifier::ITALIC | Modifier::REVERSED | Modifier::SLOW_BLINK
+        Modifier::DIM | Modifier::ITALIC | Modifier::SLOW_BLINK
     );
     assert_eq!(buffer[(98, 13)].bg, Color::Indexed(10));
     assert!(buffer[(98, 13)].modifier.contains(Modifier::CROSSED_OUT));
     assert_eq!(buffer[(0, 6)].fg, Color::Indexed(3));
     assert_eq!(buffer[(2, 0)].fg, Color::Indexed(8));
-    assert_eq!(buffer[(2, 2)].fg, Color::Indexed(11));
 }
 
 #[tokio::test]
-async fn selected_error_rows_patch_error_style_before_selection() {
-    let terminal = screen(100, 14, vec![KeyCode::Down, KeyCode::Char('q')], settings()).await;
-    let cell = &terminal.backend().buffer()[(2, 4)];
+async fn a_selected_error_card_patches_error_style_over_selection() {
+    let terminal = screen(
+        100,
+        14,
+        vec![KeyCode::Right, KeyCode::Char('q')],
+        settings(),
+    )
+    .await;
+    let cell = &terminal.backend().buffer()[position_of(&terminal, "!")];
     assert_eq!(cell.fg, Color::Indexed(12));
     assert_eq!(cell.bg, Color::Indexed(5));
     assert_eq!(
@@ -179,7 +194,7 @@ async fn help_overlay_and_undersized_canvas_keep_the_injected_background_on_blan
 }
 
 #[tokio::test]
-async fn the_tick_title_shows_and_numeric_headers_align_with_values() {
+async fn the_tick_title_shows_and_card_values_meet_the_card_edges() {
     let terminal = screen(64, 14, vec![KeyCode::Char('q')], Settings::default()).await;
     let lines: Vec<String> = terminal
         .backend()
@@ -189,8 +204,9 @@ async fn the_tick_title_shows_and_numeric_headers_align_with_values() {
         .map(|row| row.iter().map(|cell| cell.symbol()).collect())
         .collect();
     assert!(lines[0].contains("Quotes"));
-    assert_eq!(
-        lines[2].find("Price").unwrap() + "Price".len(),
-        lines[3].find("100.00").unwrap() + "100.00".len()
-    );
+    assert!(lines[2].contains("┌ AAPL.US "), "{}", lines[2]);
+    assert!(lines[3].contains("│100.00 "), "{}", lines[3]);
+    assert!(lines[3].contains(" +11.11%│"), "{}", lines[3]);
+    assert!(lines[4].contains("│+10.00 "), "{}", lines[4]);
+    assert!(lines[4].contains("Permission denied"), "{}", lines[4]);
 }

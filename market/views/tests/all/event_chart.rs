@@ -674,7 +674,8 @@ async fn compressed_event_plot_identifies_volume_sums_and_mixed_sessions() {
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>();
-        assert!(rendered.contains("10560 bars /"));
+        // A narrow Panel leaves out the candle count rather than wrap it.
+        assert_eq!(rendered.contains("10560 bars /"), width == 120);
         assert!(rendered.contains("V sum/col"));
         let sessions = (1..width - 11)
             .map(|x| buffer[(x, height - 6)].symbol())
