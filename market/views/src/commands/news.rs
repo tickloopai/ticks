@@ -134,7 +134,9 @@ impl<'a> NewsView<'a> {
             settings.ambiguous_width,
             &styles,
         );
-        let visible = inner.height.saturating_sub(1) as usize;
+        let visible = inner
+            .height
+            .saturating_sub(crate::runtime::key_hint_rows(settings)) as usize;
         self.page_size.set(visible.max(1));
         let offset = self
             .detail_scroll
@@ -301,7 +303,11 @@ impl LiveView for NewsView<'_> {
         } else {
             HEADERS[0]
         };
-        let visible = inner.height.saturating_sub(2) as usize;
+        // The header row, and the key line when the screen shows one.
+        let visible = inner
+            .height
+            .saturating_sub(1 + crate::runtime::key_hint_rows(settings))
+            as usize;
         self.page_size.set(visible.max(1));
         state.selected = self.selected_index();
         state.offset = state.offset.min(self.items.len().saturating_sub(visible));

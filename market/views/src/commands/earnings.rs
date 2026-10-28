@@ -725,11 +725,11 @@ impl EarningsView {
         );
         let suffix = match prompt.error.as_deref() {
             Some(error) => error.to_owned(),
-            None => fit_hints(
+            None => crate::runtime::key_hints(
                 &[Hint::whole("Enter apply"), Hint::whole("Ctrl+C cancel")],
                 INFO_SEPARATOR,
                 room,
-                settings.ambiguous_width,
+                settings,
             ),
         };
         let text = if suffix.is_empty() {
@@ -1171,7 +1171,12 @@ impl LiveView for EarningsView {
                 frame.buffer_mut(),
                 content.x,
                 area.y + 1,
-                &info_line(&facts, hints, columns, settings.ambiguous_width),
+                &info_line(
+                    &facts,
+                    if settings.key_hints { hints } else { &[] },
+                    columns,
+                    settings.ambiguous_width,
+                ),
                 columns,
                 settings.ambiguous_width,
                 styles.panel_base().patch(styles.muted_text),

@@ -12,12 +12,27 @@ use tickloop_ui::settings::{AmbiguousWidth, ColorMode};
 pub const DEFAULT_RELATIVE_PATH: &str = ".tickloop/config.toml";
 
 /// Effective settings after merging the file with command-line overrides.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub renderer_styles: Option<tickloop_ui::styles::RendererStyles>,
     pub color_mode: ColorMode,
     pub language: Language,
     pub ambiguous_width: AmbiguousWidth,
+    /// Whether the screen shows key hints. The runtime clears it for each frame of a hosted
+    /// Tick whose card the user has not entered, which only reads it.
+    pub key_hints: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            renderer_styles: None,
+            color_mode: ColorMode::default(),
+            language: Language::default(),
+            ambiguous_width: AmbiguousWidth::default(),
+            key_hints: true,
+        }
+    }
 }
 
 /// Values given on the command line; `None` keeps the file or default value.
@@ -53,6 +68,7 @@ impl Settings {
             language: parse_field("language", file.language)?.unwrap_or_default(),
             ambiguous_width: parse_field("ambiguous_width", file.ambiguous_width)?
                 .unwrap_or_default(),
+            ..Self::default()
         })
     }
 
@@ -74,6 +90,7 @@ impl Settings {
             color_mode: overrides.color_mode.unwrap_or(self.color_mode),
             language: overrides.language.unwrap_or(self.language),
             ambiguous_width: overrides.ambiguous_width.unwrap_or(self.ambiguous_width),
+            ..self
         }
     }
 

@@ -68,6 +68,7 @@ impl VisibleTerminalSession {
             session.terminal.backend_mut(),
             EnterAlternateScreen,
             Hide,
+            crossterm::event::EnableFocusChange,
             crossterm::style::Print(crate::viewport::BUBBLING_ON)
         ) {
             let _ = unsafe { libc::tcsetattr(fd, libc::TCSANOW, &original_termios) };
@@ -89,7 +90,12 @@ impl Drop for VisibleTerminalSession {
         TERMINAL_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
         let _ =
             unsafe { libc::tcsetattr(self.tty.as_raw_fd(), libc::TCSANOW, &self.original_termios) };
-        let _ = execute!(self.terminal.backend_mut(), LeaveAlternateScreen, Show);
+        let _ = execute!(
+            self.terminal.backend_mut(),
+            crossterm::event::DisableFocusChange,
+            LeaveAlternateScreen,
+            Show
+        );
         *PANIC_TTY.lock().unwrap_or_else(|error| error.into_inner()) = None;
         *PANIC_TERMIOS
             .lock()
@@ -280,6 +286,19 @@ pub fn visible_input_events()
                         b"\x1b[D" => {
                             Some(Event::Key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)))
                         }
+                        b"\x1b[Z" => Some(Event::Key(KeyEvent::new(
+                            KeyCode::BackTab,
+                            KeyModifiers::SHIFT,
+                        ))),
+                        b"\x1b[I" | b"\x1b[O" => {
+                            let focused = escape.as_slice() == b"\x1b[I";
+                            TERMINAL_FOCUSED.store(focused, std::sync::atomic::Ordering::Relaxed);
+                            Some(if focused {
+                                Event::FocusGained
+                            } else {
+                                Event::FocusLost
+                            })
+                        }
                         b"\x1b[H" => {
                             Some(Event::Key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE)))
                         }
@@ -377,6 +396,14 @@ pub fn visible_input_events()
     {
         Ok(Box::pin(keyboard))
     }
+}
+
+/// Whether the hosted Tick's card has the user's focus, as the host last reported it; a card
+/// starts without it.
+static TERMINAL_FOCUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn has_focus() -> bool {
+    TERMINAL_FOCUSED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Waits up to `timeout_ms` for `fd` to have input, as `poll(2)` does: positive when it has,

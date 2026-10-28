@@ -987,7 +987,9 @@ impl EventChart {
         // The status row already offers Help (and Quit), so a Panel too narrow for every key
         // keeps the chart's own keys on one line and drops that repeat.
         let keys = "v View · r / [ ] Range · e Event · Enter Detail";
-        let footer = if fits(keys) {
+        let footer = if !settings.key_hints {
+            Vec::new()
+        } else if fits(keys) {
             let general = if crate::runtime::quits_on_keys() {
                 "? Help · q Quit"
             } else {
@@ -1115,22 +1117,31 @@ impl EventChart {
                 .collect::<Vec<_>>()
                 .join("\n");
             frame.render_widget(
-                Paragraph::new(format!("{lines}\nEnter Select · Backspace Back"))
-                    .block(
-                        Block::default()
-                            .title("Events")
-                            .borders(Borders::ALL)
-                            .border_style(styles.border),
-                    )
-                    .style(styles.overlay_base()),
+                Paragraph::new(if settings.key_hints {
+                    format!("{lines}\nEnter Select · Backspace Back")
+                } else {
+                    lines
+                })
+                .block(
+                    Block::default()
+                        .title("Events")
+                        .borders(Borders::ALL)
+                        .border_style(styles.border),
+                )
+                .style(styles.overlay_base()),
                 popup,
             );
         } else if self.details
             && let Some(candle) = selected
         {
+            let back = if settings.key_hints {
+                "\nBackspace Back"
+            } else {
+                ""
+            };
             let detail_text = |note: &str| {
                 format!(
-                    "{}\nOpen {}   High {}\nLow {}   Close {}\nVolume {}  Turnover {}\nConference: {}\n{note}\nBackspace Back",
+                    "{}\nOpen {}   High {}\nLow {}   Close {}\nVolume {}  Turnover {}\nConference: {}\n{note}{back}",
                     format_instant(candle.timestamp),
                     candle.open,
                     candle.high,
@@ -1678,6 +1689,11 @@ impl EventEditor {
         }
         // The keys come first, so a narrow editor that wraps the field notes still shows them.
         let help = "Tab Next field · Enter Apply · Ctrl+C Cancel\nDate: exchange-local YYYY-MM-DD\nSession: pre_market / after_hours / during_market / closed / unknown\nActual times: RFC3339 with offset, or blank if unknown";
+        let help = if settings.key_hints {
+            help
+        } else {
+            help.split_once('\n').map_or(help, |(_, notes)| notes)
+        };
         frame.render_widget(
             Paragraph::new(help)
                 .wrap(Wrap { trim: true })

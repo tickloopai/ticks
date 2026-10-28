@@ -524,14 +524,17 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
     ]
 }
 
-fn keys(codes: Vec<KeyCode>) -> impl futures_util::Stream<Item = std::io::Result<Event>> + Unpin {
+fn press(code: KeyCode) -> Event {
+    Event::Key(KeyEvent::new(code, KeyModifiers::NONE))
+}
+
+/// `events`, then q, each a while after the one before.
+fn input(events: Vec<Event>) -> impl futures_util::Stream<Item = std::io::Result<Event>> + Unpin {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
-        for code in codes.into_iter().chain([KeyCode::Char('q')]) {
+        for event in events.into_iter().chain([press(KeyCode::Char('q'))]) {
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-            sender
-                .send(Ok(Event::Key(KeyEvent::new(code, KeyModifiers::NONE))))
-                .unwrap();
+            sender.send(Ok(event)).unwrap();
         }
     });
     tokio_stream::wrappers::UnboundedReceiverStream::new(receiver)
@@ -595,6 +598,21 @@ async fn render_keys(
     rows: u16,
     codes: Vec<KeyCode>,
 ) -> Vec<Vec<String>> {
+    render_events(
+        scenario,
+        columns,
+        rows,
+        codes.into_iter().map(press).collect(),
+    )
+    .await
+}
+
+async fn render_events(
+    scenario: &Scenario,
+    columns: u16,
+    rows: u16,
+    events: Vec<Event>,
+) -> Vec<Vec<String>> {
     let api = match scenario.source {
         Some(source) => MockApi::named(source),
         None => MockApi::new(),
@@ -603,7 +621,7 @@ async fn render_keys(
     let settings = Settings::default();
     let mut terminal = Terminal::new(TestBackend::new(columns, rows)).unwrap();
     let mut updates = TickStream::in_memory(scenario.kind);
-    let input = keys(codes);
+    let input = input(events);
     match scenario.kind {
         TickKind::Quote => commands::quote::run_live(
             &QuoteArgs {
@@ -906,7 +924,7 @@ async fn a_lone_quote_card_widens_to_show_every_session_figure() {
         &api,
         &Settings::default(),
         &mut terminal,
-        keys(Vec::new()),
+        input(Vec::new()),
         &mut TickStream::in_memory(TickKind::Quote),
     )
     .await
@@ -1097,4 +1115,97 @@ async fn the_help_overlay_lists_the_scroll_keys_while_the_panel_scrolls() {
     assert!(scrolling.contains("< / >  Scroll"), "{scrolling}");
     let fitting = text(&render(&help, LAPTOP.0, LAPTOP.1).await);
     assert!(!fitting.contains("Scroll"), "{fitting}");
+}
+
+/// What a key hint looks like on any Tick's screen; an article may mention keys in its prose.
+const KEY_HINTS: [&str; 21] = [
+    "? Help",
+    "?  q Quit",
+    "q Quit",
+    "Enter Read",
+    "Backspace Back",
+    "Backspace back",
+    "j/k Scroll",
+    "Ctrl+C",
+    "Enter Apply",
+    "Enter apply",
+    "1–8",
+    "m MA",
+    "d Docs",
+    "Enter Select",
+    "Enter detail",
+    "Enter details",
+    "[ ] expiry",
+    "v View",
+    "a Ask Chat",
+    "n/N",
+    "R refresh",
+];
+
+/// A card the user only looks at, which the host reports by taking the terminal's focus away.
+fn looked_at(scenario: &Scenario) -> Vec<Event> {
+    std::iter::once(Event::FocusLost)
+        .chain(scenario.keys.iter().copied().map(press))
+        .collect()
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_card_the_user_only_looks_at_shows_no_key_hints() {
+    let mut failures = Vec::new();
+    // The help overlay lists keys because someone asked for it.
+    let scenarios = every_tick_at_the_minimum_width()
+        .into_iter()
+        .filter(|scenario| !scenario.keys.contains(&KeyCode::Char('?')));
+    for scenario in scenarios {
+        let (columns, rows) = (MONITOR_CARD_COLUMNS, LAPTOP.1);
+        let label = scenario.label(columns, rows);
+        let operable = text(&render(&scenario, columns, rows).await);
+        if !KEY_HINTS.iter().any(|hint| operable.contains(hint)) {
+            failures.push(format!(
+                "{label} shows no key hints in its card:\n{operable}"
+            ));
+        }
+        let read_only = text(&render_events(&scenario, columns, rows, looked_at(&scenario)).await);
+        for hint in KEY_HINTS.iter().filter(|hint| read_only.contains(*hint)) {
+            failures.push(format!("{label} shows {hint:?} to a looker:\n{read_only}"));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn switching_focus_back_and_forth_leaves_no_stale_key_hints() {
+    let news = scenario(TickKind::News, &[], &[]);
+    let (columns, rows) = (MONITOR_CARD_COLUMNS, 12);
+    let focus = |gained: bool| {
+        if gained {
+            Event::FocusGained
+        } else {
+            Event::FocusLost
+        }
+    };
+    let operable = text(&render(&news, columns, rows).await);
+    let read_only = text(&render_events(&news, columns, rows, vec![Event::FocusLost]).await);
+    assert_ne!(operable, read_only);
+    for last in [false, true] {
+        let switches = (0..7)
+            .map(|index| focus(index % 2 == 1))
+            .chain([focus(last)]);
+        let frame = text(&render_events(&news, columns, rows, switches.collect()).await);
+        assert_eq!(&frame, if last { &operable } else { &read_only });
+    }
+}
+
+/// The host's Agent sends a card keys while the user only looks at it, so a read-only card
+/// answers every key it receives.
+#[tokio::test(start_paused = true)]
+async fn a_card_the_user_only_looks_at_still_answers_keys() {
+    let news = scenario(TickKind::News, &[], &[]);
+    let opened = vec![
+        Event::FocusLost,
+        press(KeyCode::Down),
+        press(KeyCode::Enter),
+    ];
+    let frame = text(&render_events(&news, MONITOR_CARD_COLUMNS, LAPTOP.1, opened).await);
+    assert!(frame.contains("News article"), "{frame}");
 }

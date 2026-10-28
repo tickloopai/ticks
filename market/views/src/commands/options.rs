@@ -891,6 +891,9 @@ impl LiveView for OptionsView {
         .max(u16::try_from(description.line_count(body.width)).unwrap_or(u16::MAX));
         let note = match self.notice.as_deref() {
             Some(notice) => notice.to_owned(),
+            // A card the user only looks at keeps the pricing caveat, without the keys.
+            None if !settings.key_hints && self.research.is_some() => String::new(),
+            None if !settings.key_hints => PRICING_NOTE.to_owned(),
             None if self.research.is_some() => "b before · p after · c current · a Ask Chat · Enter details\ns save CURRENT · r refresh current · h event history · Backspace back".to_owned(),
             None if !compact => format!("[ ] expiry · Enter details · r refresh · s save · h history · Backspace back\n{PRICING_NOTE}"),
             None => {
@@ -913,7 +916,9 @@ impl LiveView for OptionsView {
         let note = Paragraph::new(note)
             .style(styles.muted_text)
             .wrap(Wrap { trim: false });
-        let note_rows = 2.max(u16::try_from(note.line_count(body.width)).unwrap_or(u16::MAX));
+        let note_rows = u16::try_from(note.line_count(body.width))
+            .unwrap_or(u16::MAX)
+            .max(if settings.key_hints { 2 } else { 0 });
         let parts = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(description_rows),
@@ -1008,10 +1013,11 @@ impl LiveView for OptionsView {
                     .scroll((self.detail_scroll, 0))
                     .block(
                         Block::default()
-                            .title(if compact {
-                                " Contract · Backspace back "
-                            } else {
-                                " Contract / saved snapshot · Backspace back "
+                            .title(match (compact, settings.key_hints) {
+                                (true, true) => " Contract · Backspace back ",
+                                (false, true) => " Contract / saved snapshot · Backspace back ",
+                                (true, false) => " Contract ",
+                                (false, false) => " Contract / saved snapshot ",
                             })
                             .borders(Borders::ALL)
                             .border_style(styles.border),

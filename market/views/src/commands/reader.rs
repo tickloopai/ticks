@@ -12,7 +12,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tickloop_ui::{
-    format::{Hint, fit_hints, width, write_text},
+    format::{Hint, width, write_text},
     markdown,
 };
 
@@ -1108,14 +1108,15 @@ impl LiveView for ReaderView {
         } else if let Some(notice) = &self.notice {
             notice.clone()
         } else if !self.search.is_empty() {
-            format!(
-                "/{} · {} matches · n/N next/previous",
-                self.search,
-                self.search_matches.get()
-            )
+            let matches = format!("/{} · {} matches", self.search, self.search_matches.get());
+            if settings.key_hints {
+                format!("{matches} · n/N next/previous")
+            } else {
+                matches
+            }
         } else {
             let position = format!("{}/{}", self.section.get() + 1, document.sections.len());
-            let keys = fit_hints(
+            let keys = crate::runtime::key_hints(
                 &[
                     Hint::new("d Docs", "d"),
                     Hint::new("t Contents", "t"),
@@ -1126,9 +1127,13 @@ impl LiveView for ReaderView {
                 (inner.width as usize).saturating_sub(
                     width(&position, settings.ambiguous_width) + FOOTER_SEPARATOR.len(),
                 ),
-                settings.ambiguous_width,
+                settings,
             );
-            format!("{keys}{FOOTER_SEPARATOR}{position}")
+            if keys.is_empty() {
+                position
+            } else {
+                format!("{keys}{FOOTER_SEPARATOR}{position}")
+            }
         };
         write_text(
             frame.buffer_mut(),

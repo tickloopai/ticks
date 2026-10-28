@@ -29,7 +29,7 @@ use tickloop_ui::{
 const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
 const WIDE_PANEL_COLUMNS: u16 = 64;
 const TALL_PANEL_ROWS: u16 = 10;
-const HELP_TITLE: &str = " Keys · ? / Esc close ";
+const HELP_TITLE: &str = " Keys · ? / Esc / Backspace close ";
 const NARROW_HELP_TITLE: &str = " Keys · ? close ";
 /// Under a help overlay too short for every key.
 const HELP_SCROLL_HINT: &str = " j/k more ";
@@ -103,6 +103,9 @@ pub struct ViewState {
     pub help: bool,
     /// How many lines of the help overlay are scrolled past; a short Panel scrolls its keys.
     pub help_offset: u16,
+    /// Whether the user is in the Tick's card, where its keys are worth showing: a card the user
+    /// only looks at shows no key hints, though the Tick still answers every key it receives.
+    pub focused: bool,
     pub connection: ConnectionState,
     pub last_error: Option<String>,
     /// The canvas column and row of what the view has focused in this frame; a scrolling
@@ -118,6 +121,7 @@ impl Default for ViewState {
             offset: 0,
             help: false,
             help_offset: 0,
+            focused: !in_instance() || crate::terminal::has_focus(),
             connection: ConnectionState::Connected,
             last_error: None,
             focus_column: None,
@@ -457,6 +461,11 @@ pub async fn run<
                         None => break,
                         Some(Err(error)) => return Err(error.into()),
                         Some(Ok(Event::Resize(_, _))) => { terminal.clear().map_err(|error| Error::usage(error.to_string()))?; shown = None; }
+                        Some(Ok(event @ (Event::FocusGained | Event::FocusLost))) => {
+                            state.focused = event == Event::FocusGained;
+                            terminal.clear().map_err(|error| Error::usage(error.to_string()))?;
+                            shown = None;
+                        }
                         Some(Ok(Event::Key(key))) if key.kind != KeyEventKind::Release => {
                             let bubble = bubbled_key_name(&key, view.captures_text());
                             let size = terminal.size().map_err(|error| Error::usage(error.to_string()))?;
@@ -724,6 +733,14 @@ fn compose<V: LiveView>(
     viewport: &mut ScrollViewport,
     settings: &Settings,
 ) -> (Buffer, Option<Position>) {
+    // A focus report a wait dropped still reached the terminal's record of the focus.
+    if in_instance() {
+        state.focused = crate::terminal::has_focus();
+    }
+    let settings = &Settings {
+        key_hints: settings.key_hints && state.focused,
+        ..settings.clone()
+    };
     let minimum = view.minimum_panel_size();
     viewport.set_layout(ViewportLayout::of(
         Rect::new(0, 0, size.width, size.height),
@@ -849,7 +866,9 @@ fn draw_canvas<V: LiveView>(
     } else {
         format!("{icon} {}", state.availability())
     };
-    let keys = if view.captures_text() && area.width >= 40 {
+    let keys = if !settings.key_hints {
+        ""
+    } else if view.captures_text() && area.width >= 40 {
         "Enter Apply  Ctrl+C Cancel"
     } else if view.captures_text() {
         "Ctrl+C Cancel"
@@ -997,37 +1016,46 @@ pub fn standalone_hints<'a, 'b>(
     }
 }
 
+/// `hints` joined to fit `columns` as [`tickloop_ui::format::fit_hints`] joins them, or nothing
+/// on a screen that shows no key hints.
+pub fn key_hints(
+    hints: &[tickloop_ui::format::Hint<'_>],
+    separator: &str,
+    columns: usize,
+    settings: &Settings,
+) -> String {
+    if !settings.key_hints {
+        return String::new();
+    }
+    tickloop_ui::format::fit_hints(hints, separator, columns, settings.ambiguous_width)
+}
+
+/// The rows a view keeps for its line of key hints: none on a screen that shows none.
+pub fn key_hint_rows(settings: &Settings) -> u16 {
+    u16::from(settings.key_hints)
+}
+
 /// The key line under a list of articles or posts; a narrow Panel drops the keys the status row
 /// already offers.
 pub fn reading_list_keys(columns: usize, settings: &Settings) -> String {
-    use tickloop_ui::format::{Hint, fit_hints};
+    use tickloop_ui::format::Hint;
     let hints = [
         Hint::whole("Enter Read"),
         Hint::whole("? Help"),
         Hint::whole(QUIT_HINT),
     ];
-    fit_hints(
-        standalone_hints(&hints),
-        "  ·  ",
-        columns,
-        settings.ambiguous_width,
-    )
+    key_hints(standalone_hints(&hints), "  ·  ", columns, settings)
 }
 
 /// The key line under an open article or post.
 pub fn reading_keys(columns: usize, settings: &Settings) -> String {
-    use tickloop_ui::format::{Hint, fit_hints};
+    use tickloop_ui::format::Hint;
     let hints = [
         Hint::whole("Backspace Back"),
         Hint::whole("j/k Scroll"),
         Hint::whole(QUIT_HINT),
     ];
-    fit_hints(
-        standalone_hints(&hints),
-        " · ",
-        columns,
-        settings.ambiguous_width,
-    )
+    key_hints(standalone_hints(&hints), " · ", columns, settings)
 }
 
 pub fn table_content_area(area: Rect) -> Rect {

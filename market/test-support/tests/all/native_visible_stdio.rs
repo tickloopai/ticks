@@ -125,6 +125,14 @@ fn a_hosted_tick_quits_on_no_key_and_bubbles_an_unused_esc() {
         "{output:?}"
     );
     assert!(output.contains("\x1b]7777;tickloop;key=esc\x07"));
+    // The host reports whether the user is in the card; until then the card only shows.
+    assert!(output.contains("\x1b[?1004h"));
+    assert!(!output.contains("? Help"), "{output:?}");
+    let before_focus = screen.lock().unwrap().len();
+    tty.write_all(b"\x1b[I").unwrap();
+    std::thread::sleep(Duration::from_millis(250));
+    let focused = String::from_utf8_lossy(&screen.lock().unwrap()[before_focus..]).into_owned();
+    assert!(focused.contains("? Help"), "{focused:?}");
     tty.write_all(b"5").unwrap();
     let switched = loop {
         let frame = next(&frames);

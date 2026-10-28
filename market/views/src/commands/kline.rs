@@ -851,7 +851,11 @@ impl crate::runtime::LiveView for KlineView {
                     frame.buffer_mut(),
                     area.x + 1,
                     area.bottom() - 2,
-                    "a Ask Chat · ? Help",
+                    if settings.key_hints {
+                        "a Ask Chat · ? Help"
+                    } else {
+                        ""
+                    },
                     usize::from(area.width.saturating_sub(2)),
                     settings.ambiguous_width,
                     settings.styles().status_base(),
@@ -1241,27 +1245,37 @@ impl crate::runtime::LiveView for KlineView {
             settings.ambiguous_width,
             styles.chart_cursor,
         );
-        let footer = fit_hints(
-            &[
-                Hint::new("1–8 Period", "1–8"),
-                Hint::new(
-                    if self.show_averages {
-                        "m MA5/10/20"
-                    } else {
-                        "m MA off"
-                    },
-                    "m MA",
-                ),
-                if self.supports_push {
-                    Hint::new("Live + 30s sync", "Live")
-                } else {
-                    Hint::new("30s refresh", "30s")
-                },
-            ],
-            " · ",
-            inner.width as usize,
-            settings.ambiguous_width,
-        );
+        let averages = if self.show_averages {
+            "MA5/10/20"
+        } else {
+            "MA off"
+        };
+        let refresh = if self.supports_push {
+            Hint::new("Live + 30s sync", "Live")
+        } else {
+            Hint::new("30s refresh", "30s")
+        };
+        // A card the user only looks at keeps what the footer tells, without its keys.
+        let footer = if settings.key_hints {
+            let averages_key = format!("m {averages}");
+            fit_hints(
+                &[
+                    Hint::new("1–8 Period", "1–8"),
+                    Hint::new(&averages_key, "m MA"),
+                    refresh,
+                ],
+                " · ",
+                inner.width as usize,
+                settings.ambiguous_width,
+            )
+        } else {
+            fit_hints(
+                &[Hint::new(averages, "MA"), refresh],
+                " · ",
+                inner.width as usize,
+                settings.ambiguous_width,
+            )
+        };
         frame.buffer_mut().set_style(
             ratatui::layout::Rect::new(inner.x, inner.bottom() - 1, inner.width, 1),
             styles.status_base(),
