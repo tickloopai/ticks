@@ -108,15 +108,15 @@ async fn screen(
     terminal
 }
 
-/// Where `symbol` first appears inside the Tick's frame.
+/// Where `symbol` first appears in the buffer.
 fn position_of(terminal: &Terminal<TestBackend>, symbol: &str) -> (u16, u16) {
     let buffer = terminal.backend().buffer();
-    let inside = buffer.area.inner(ratatui::layout::Margin::new(1, 1));
-    inside
-        .positions()
-        .find(|position| buffer[*position].symbol() == symbol)
-        .map(|position| (position.x, position.y))
-        .unwrap()
+    let index = buffer
+        .content
+        .iter()
+        .position(|cell| cell.symbol() == symbol)
+        .unwrap();
+    buffer.pos_of(index)
 }
 
 #[tokio::test]
@@ -146,12 +146,11 @@ async fn injected_styles_cover_blank_panel_status_price_and_selection_modifiers(
         gain.modifier,
         Modifier::DIM | Modifier::ITALIC | Modifier::SLOW_BLINK
     );
-    // The Tick's frame, its edges and what they carry, keeps the border on the panel.
-    for edge in [(2, 0), (0, 6), (98, 13)] {
-        assert_eq!(buffer[edge].fg, Color::Indexed(9), "{edge:?}");
-        assert_eq!(buffer[edge].bg, Color::Indexed(4), "{edge:?}");
-    }
-    assert_eq!(buffer[(1, 6)].fg, Color::Indexed(3));
+    // The cards are the Tick's only borders: the last one carries the keys on its bottom edge.
+    let keys = &buffer[position_of(&terminal, "?")];
+    assert_eq!(keys.fg, Color::Indexed(11));
+    assert_eq!(keys.bg, Color::Indexed(4));
+    assert_eq!(buffer[(0, 6)].fg, Color::Indexed(3));
 }
 
 #[tokio::test]
@@ -182,8 +181,7 @@ async fn help_overlay_and_undersized_canvas_keep_the_injected_background_on_blan
     )
     .await;
     let blank = &terminal.backend().buffer()[(80, 9)];
-    // The overlay sits inside the Tick's frame.
-    assert_eq!(terminal.backend().buffer()[(14, 2)].fg, Color::Indexed(9));
+    assert_eq!(terminal.backend().buffer()[(14, 1)].fg, Color::Indexed(9));
     assert_eq!(blank.symbol(), " ");
     assert_eq!(blank.bg, Color::Indexed(7));
     assert_eq!(blank.fg, Color::Indexed(6));
@@ -191,9 +189,9 @@ async fn help_overlay_and_undersized_canvas_keep_the_injected_background_on_blan
         blank.modifier,
         Modifier::DIM | Modifier::ITALIC | Modifier::UNDERLINED
     );
+    // A screen smaller than the cards scrolls over them, its indicator row in the status style.
     let small = screen(20, 4, vec![KeyCode::Char('q')], settings()).await;
-    assert_eq!(small.backend().buffer()[(19, 0)].bg, Color::Indexed(4));
-    assert_eq!(small.backend().buffer()[(19, 3)].bg, Color::Indexed(4));
+    assert_eq!(small.backend().buffer()[(19, 3)].bg, Color::Indexed(10));
 }
 
 #[tokio::test]
@@ -206,13 +204,12 @@ async fn the_tick_title_shows_and_card_values_meet_the_card_edges() {
         .chunks(64)
         .map(|row| row.iter().map(|cell| cell.symbol()).collect())
         .collect();
-    // The Monitor names the Tick, so its frame needs no title while every card shows.
-    assert!(lines[0].starts_with("┌───"), "{}", lines[0]);
-    assert!(lines[1].contains("┌ AAPL.US "), "{}", lines[1]);
-    assert!(lines[2].contains("│100.00 "), "{}", lines[2]);
-    assert!(lines[2].contains(" +11.11%│"), "{}", lines[2]);
-    assert!(lines[3].contains("│+10.00 "), "{}", lines[3]);
-    assert!(lines[3].contains("Permission denied"), "{}", lines[3]);
+    // The cards fill the screen from its first row, with no frame or title around them.
+    assert!(lines[0].starts_with("┌ AAPL.US "), "{}", lines[0]);
+    assert!(lines[1].contains("│100.00 "), "{}", lines[1]);
+    assert!(lines[1].contains(" +11.11%│"), "{}", lines[1]);
+    assert!(lines[2].contains("│+10.00 "), "{}", lines[2]);
+    assert!(lines[2].contains("Permission denied"), "{}", lines[2]);
 }
 
 /// A terminal that counts the frames written to it: Ratatui shows or hides the cursor once per

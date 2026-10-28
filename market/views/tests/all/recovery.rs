@@ -683,10 +683,9 @@ async fn article_authentication_and_usage_errors_remain_fatal() {
     }
 }
 
-/// Whether the frame tells of data arriving: its mark alone, with no problem on its bottom edge.
+/// Whether the frame tells of no problem with the data on its bottom edge.
 fn shows_data(screen: &str) -> bool {
-    screen.contains('●')
-        && !["Unavailable", "Disconnected", "Recovering"]
-            .iter()
-            .any(|problem| screen.contains(problem))
+    !["Unavailable", "Disconnected", "Recovering"]
+        .iter()
+        .any(|problem| screen.contains(problem))
 }

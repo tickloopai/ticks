@@ -824,12 +824,14 @@ impl EventChart {
         Ok(true)
     }
 
-    /// Draws the chart and gives the Tick's frame its `title`.
+    /// Draws the chart and gives the Tick's frame its `title`, which shows `title_columns` whole.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &self,
         frame: &mut ratatui::Frame<'_>,
         symbol: &str,
         title: &mut String,
+        title_columns: usize,
         settings: &Settings,
         marks: &[crate::commands::kline::PriceMark],
     ) {
@@ -857,8 +859,7 @@ impl EventChart {
             self.config.view.label()
         );
         let fits_title = |title: &str| {
-            tickloop_ui::format::width(title, settings.ambiguous_width)
-                <= crate::runtime::frame_title_columns(area.width)
+            tickloop_ui::format::width(title, settings.ambiguous_width) <= title_columns
         };
         // The release line repeats the date, and the Monitor names the symbol, so a narrow title
         // keeps the view.

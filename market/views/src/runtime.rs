@@ -34,14 +34,12 @@ const NARROW_HELP_TITLE: &str = " Keys · ? close ";
 const HELP_SCROLL_HINT: &str = " j/k more ";
 /// The Tick's frame takes a row above and below its view and a column either side.
 pub const FRAME_WIDTH: u16 = 1;
-/// The corners, a dash before the data mark, and the mark with a space either side.
-const TITLE_MARGIN: usize = 8;
-/// The narrowest frame that still carries a title and the data mark.
-const MINIMUM_FRAME_COLUMNS: u16 = 10;
-/// The data state on the frame's top edge: data arriving, or, in the error style, not.
-const DATA_MARK: &str = "●";
-/// The data state while the Tick recovers its connection.
-const RECOVERING_MARK: &str = "◌";
+/// The corners, a space either side of the title, and a dash after it.
+const TITLE_MARGIN: usize = 5;
+/// The key a crowded bottom edge keeps, which lists the others.
+const HELP_KEY: &str = "?";
+/// The narrowest frame that still carries a title.
+const MINIMUM_FRAME_COLUMNS: u16 = 8;
 pub const CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 pub const REFRESH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 /// A Tick Tool call runs beside the view, so both the number in flight and how
@@ -115,6 +113,11 @@ pub struct ViewState {
     /// The title the view gives this frame, shown on the top edge of the Tick's frame; views
     /// set it while they draw.
     pub title: String,
+    /// How wide the Tick's frame is this frame.
+    pub frame_columns: u16,
+    /// What the bottom edge of the Tick's frame carries this frame, which a view drawn without
+    /// the frame shows itself.
+    pub edge: EdgeLabels,
     /// Whether the user is in the Tick's card, where its keys are worth showing: a card the user
     /// only looks at shows no key hints, though the Tick still answers every key it receives.
     pub focused: bool,
@@ -134,6 +137,8 @@ impl Default for ViewState {
             help: false,
             help_offset: 0,
             title: String::new(),
+            frame_columns: 0,
+            edge: EdgeLabels::default(),
             focused: !in_instance() || crate::terminal::has_focus(),
             connection: ConnectionState::Connected,
             last_error: None,
@@ -222,6 +227,11 @@ pub trait LiveView: Send {
     }
     fn help(&self) -> &'static str {
         "?  Help\nj / k / Ctrl+N / Ctrl+P / arrows  Move\nPageUp / PageDown  Page\ng / G  First / last"
+    }
+    /// Whether the runtime draws the Tick's frame around the view. A view of bordered cards
+    /// takes the whole screen instead and shows the frame's bottom edge on its last card.
+    fn framed(&self) -> bool {
+        true
     }
     /// While an in-Panel editor is open the view owns every printable key and Backspace, and
     /// Ctrl+C cancels the edit instead of quitting.
@@ -739,7 +749,7 @@ async fn handle_key<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Ev
 }
 
 /// The whole screen of `size` the view shows now, with its cursor: the view inside a frame that
-/// carries its title and data state above and its keys and errors below, scrolled over the
+/// carries its title above and its keys and errors below, scrolled over the
 /// canvas of the Tick's minimum when the frame is smaller, and the help overlay.
 fn compose<V: LiveView>(
     view: &V,
@@ -756,20 +766,24 @@ fn compose<V: LiveView>(
         key_hints: settings.key_hints && state.focused,
         ..settings.clone()
     };
+    let framed = view.framed();
+    let frame_width = if framed { FRAME_WIDTH } else { 0 };
     let content = Rect::new(
-        FRAME_WIDTH,
-        FRAME_WIDTH,
-        size.width.saturating_sub(FRAME_WIDTH * 2),
-        size.height.saturating_sub(FRAME_WIDTH * 2),
+        frame_width,
+        frame_width,
+        size.width.saturating_sub(frame_width * 2),
+        size.height.saturating_sub(frame_width * 2),
     );
     let minimum = view.minimum_panel_size();
     viewport.set_layout(ViewportLayout::of(
         content,
         Size::new(
-            minimum.columns.saturating_sub(FRAME_WIDTH * 2),
-            minimum.rows.saturating_sub(FRAME_WIDTH * 2),
+            minimum.columns.saturating_sub(frame_width * 2),
+            minimum.rows.saturating_sub(frame_width * 2),
         ),
     ));
+    state.edge = edge_labels(view, state, size.width, settings);
+    state.frame_columns = size.width;
     let layout = viewport.layout();
     // ratatui hands out a Frame only through a Terminal, so the view draws into an in-memory one.
     let Ok(mut canvas) = Terminal::new(CanvasBackend::new(
@@ -812,7 +826,9 @@ fn compose<V: LiveView>(
                     .set_cursor_position(Position::new(cursor.x + content.x, cursor.y + content.y));
             }
         }
-        draw_frame(view, frame, state, settings);
+        if framed {
+            draw_frame(frame, state, settings);
+        }
         if state.help {
             let area = content;
             let mut keys = view.help().to_owned();
@@ -868,9 +884,10 @@ fn compose<V: LiveView>(
     (composed, screen.backend().cursor())
 }
 
-/// How wide a title the Tick's frame shows whole around a view `content_columns` wide.
-pub fn frame_title_columns(content_columns: u16) -> usize {
-    usize::from(content_columns + FRAME_WIDTH * 2).saturating_sub(TITLE_MARGIN)
+/// How wide a title the Tick's frame shows whole this frame; a frame smaller than the Tick's
+/// minimum scrolls over a wider view, so the view asks rather than measure itself.
+pub fn frame_title_columns(state: &ViewState) -> usize {
+    usize::from(state.frame_columns).saturating_sub(TITLE_MARGIN)
 }
 
 /// Draws the view into the frame, which is the inside of the Tick's frame or, for one smaller than
@@ -889,15 +906,9 @@ fn draw_view<V: LiveView>(
     view.draw(frame, state, settings);
 }
 
-/// The Tick's frame around the whole screen: the view's title on the left of the top edge and a
-/// one-column mark of its data state on the right, its keys on the right of the bottom edge and
-/// the last error on the left, so neither takes a row of its own.
-fn draw_frame<V: LiveView>(
-    view: &V,
-    frame: &mut Frame<'_>,
-    state: &ViewState,
-    settings: &Settings,
-) {
+/// The Tick's frame around the whole screen: the view's title on the left of the top edge and
+/// its bottom edge's labels below, so neither takes a row of its own.
+fn draw_frame(frame: &mut Frame<'_>, state: &ViewState, settings: &Settings) {
     let area = frame.area();
     let styles = settings.styles();
     let edge = styles.panel_base().patch(styles.border);
@@ -908,21 +919,7 @@ fn draw_frame<V: LiveView>(
     if area.width < MINIMUM_FRAME_COLUMNS || area.height < 2 {
         return;
     }
-    let (mark, mark_style) = match state.connection {
-        ConnectionState::Connected => (DATA_MARK, styles.title),
-        ConnectionState::Reconnecting => (RECOVERING_MARK, styles.muted_text),
-        ConnectionState::Disconnected => (DATA_MARK, styles.error),
-    };
-    write_text(
-        frame.buffer_mut(),
-        area.right() - 4,
-        area.y,
-        &format!(" {mark} "),
-        3,
-        settings.ambiguous_width,
-        edge.patch(mark_style),
-    );
-    // The corners, a dash and the spaced mark leave the rest of the top edge to the title.
+    // The Monitor's row tells when the Tick updates, so the top edge carries only the title.
     let title_columns = usize::from(area.width).saturating_sub(TITLE_MARGIN);
     let title =
         tickloop_ui::format::truncate(&state.title, title_columns, settings.ambiguous_width);
@@ -937,58 +934,109 @@ fn draw_frame<V: LiveView>(
             edge,
         );
     }
+    let bottom = Rect::new(area.x, area.bottom() - 1, area.width, 1);
+    draw_bottom_edge(frame, bottom, "", &state.edge, settings);
+}
+
+/// What the bottom edge of the Tick's frame carries: the keys on its right, and the last problem
+/// with the data on its left.
+#[derive(Clone, Debug, Default)]
+pub struct EdgeLabels {
+    pub keys: String,
+    pub problem: Option<String>,
+}
+
+fn edge_labels<V: LiveView>(
+    view: &V,
+    state: &ViewState,
+    columns: u16,
+    settings: &Settings,
+) -> EdgeLabels {
     let keys = if !settings.key_hints {
         ""
-    } else if view.captures_text() && area.width >= 40 {
+    } else if view.captures_text() && columns >= 40 {
         "Enter Apply  Ctrl+C Cancel"
     } else if view.captures_text() {
         "Ctrl+C Cancel"
     } else if !quits_on_keys() {
         "? Help"
-    } else if area.width >= 40 {
+    } else if columns >= 40 {
         "? Help  q Quit"
     } else {
         "?  q Quit"
     };
-    let keys = if keys.is_empty() {
-        String::new()
-    } else {
-        format!(" {keys} ")
-    };
-    let keys_width = width(&keys, settings.ambiguous_width) as u16;
-    let bottom = area.bottom() - 1;
-    write_text(
-        frame.buffer_mut(),
-        area.right().saturating_sub(2 + keys_width),
-        bottom,
-        &keys,
-        usize::from(keys_width),
-        settings.ambiguous_width,
-        edge.patch(styles.muted_text),
-    );
     let problem = match (&state.last_error, state.connection) {
         (Some(error), ConnectionState::Connected) => Some(error.clone()),
         (Some(error), _) => Some(format!("{} · {error}", state.availability())),
         (None, ConnectionState::Connected) => None,
         (None, _) => Some(state.availability().to_owned()),
     };
-    if let Some(problem) = problem {
-        let room = usize::from(area.width.saturating_sub(keys_width + 5));
-        let problem = tickloop_ui::format::truncate(&problem, room, settings.ambiguous_width);
-        write_text(
-            frame.buffer_mut(),
-            area.x + 1,
-            bottom,
-            &format!(" {problem} "),
-            room + 2,
-            settings.ambiguous_width,
-            edge.patch(if state.last_error.is_some() {
-                styles.error
-            } else {
-                styles.muted_text
-            }),
-        );
+    EdgeLabels {
+        keys: keys.to_owned(),
+        problem,
     }
+}
+
+/// Writes `labels` on `edge`, a bottom border row with its corners: the keys on the right, and
+/// `lead` then the problem on the left in the room the keys leave.
+pub fn draw_bottom_edge(
+    frame: &mut Frame<'_>,
+    edge: Rect,
+    lead: &str,
+    labels: &EdgeLabels,
+    settings: &Settings,
+) {
+    let styles = settings.styles();
+    let border = styles.panel_base().patch(styles.border);
+    let spaced = |text: &str| {
+        if text.is_empty() {
+            String::new()
+        } else {
+            format!(" {text} ")
+        }
+    };
+    let left = [Some(lead), labels.problem.as_deref()]
+        .into_iter()
+        .flatten()
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    // What the left says outranks the keys, which give way to the help key alone.
+    let mut keys = spaced(&labels.keys);
+    if !keys.is_empty()
+        && width(&spaced(&left), settings.ambiguous_width)
+            + width(&keys, settings.ambiguous_width)
+            + 3
+            > usize::from(edge.width)
+    {
+        keys = spaced(HELP_KEY);
+    }
+    let keys_width = width(&keys, settings.ambiguous_width) as u16;
+    write_text(
+        frame.buffer_mut(),
+        edge.right().saturating_sub(2 + keys_width),
+        edge.y,
+        &keys,
+        usize::from(keys_width),
+        settings.ambiguous_width,
+        border.patch(styles.muted_text),
+    );
+    // The corners, a dash either side and the spaces around the text.
+    let room = usize::from(edge.width.saturating_sub(keys_width + 5));
+    let left = tickloop_ui::format::truncate(&left, room, settings.ambiguous_width);
+    write_text(
+        frame.buffer_mut(),
+        edge.x + 1,
+        edge.y,
+        &spaced(&left),
+        room + 2,
+        settings.ambiguous_width,
+        border.patch(if labels.problem.is_some() {
+            styles.error
+        } else {
+            styles.muted_text
+        }),
+    );
 }
 
 /// Why a Tick has no content from its data source yet.

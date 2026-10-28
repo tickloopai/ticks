@@ -1094,7 +1094,7 @@ impl LiveView for EarningsView {
         let area = frame.area();
         let content_columns = crate::runtime::table_content_area(area).width as usize;
         let title = self.panel_title(
-            crate::runtime::frame_title_columns(area.width),
+            crate::runtime::frame_title_columns(state),
             settings.ambiguous_width,
         );
         let mut table = self.table();

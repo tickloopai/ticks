@@ -15,9 +15,9 @@ use tickloop_ui::{
     styles::PriceDirection,
 };
 
-/// The narrowest card, which fills the narrowest Panel inside its padding; a wider Panel fits
-/// as many cards across as this allows and shares the rest between them.
-const MINIMUM_CARD_COLUMNS: usize = crate::metadata::MINIMUM_PANEL_COLUMNS as usize - 2;
+/// The narrowest card, which fills the narrowest Panel; a wider Panel fits as many cards across
+/// as this allows and shares the rest between them.
+const MINIMUM_CARD_COLUMNS: usize = crate::metadata::MINIMUM_PANEL_COLUMNS as usize;
 const CARD_ROWS: usize = 4;
 const CARD_GAP: usize = 2;
 const FIGURE_GAP: &str = "  ";
@@ -61,8 +61,10 @@ impl CardGrid {
         true
     }
 
-    /// Draws a card for each quote, `markers` giving each card's symbol a prefix, and gives the
-    /// frame `title` with which cards show when not all fit.
+    /// Draws a card for each quote across the whole screen, `markers` giving each card's symbol a
+    /// prefix. The cards are the Tick's only borders, so the last one shown carries what the
+    /// frame's bottom edge would: `title` and which cards show when not all fit, the problem
+    /// with the data, and the keys.
     pub fn draw(
         &self,
         frame: &mut ratatui::Frame<'_>,
@@ -75,8 +77,7 @@ impl CardGrid {
         let area = frame.area();
         let styles = settings.styles();
         frame.buffer_mut().set_style(area, styles.panel_base());
-        let inner = crate::runtime::table_content_area(area);
-        state.title = title.to_owned();
+        let inner = area;
         if quotes.is_empty() {
             write_text(
                 frame.buffer_mut(),
@@ -103,16 +104,19 @@ impl CardGrid {
             state.offset = selected_row + 1 - visible_rows;
         }
         let total_rows = quotes.len().div_ceil(per_row);
-        if total_rows > visible_rows {
+        let range = (total_rows > visible_rows).then(|| {
             let first = state.offset * per_row + 1;
             let last = ((state.offset + visible_rows) * per_row).min(quotes.len());
-            let range = format!("{first}–{last}/{}", quotes.len());
-            state.title = [title, &range]
-                .into_iter()
-                .filter(|part| !part.is_empty())
-                .collect::<Vec<_>>()
-                .join(" · ");
-        }
+            format!("{first}–{last}/{}", quotes.len())
+        });
+        // Which cards show stays whole; the title gives way first.
+        let lead = [range.as_deref(), Some(title)]
+            .into_iter()
+            .flatten()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · ");
+        let mut last_card = None;
         let cells = crate::commands::quote::table(quotes).display_rows(settings);
         for (index, (quote, cells)) in quotes.iter().zip(&cells).enumerate() {
             let marker = markers.get(index).copied().unwrap_or_default();
@@ -132,6 +136,11 @@ impl CardGrid {
                 state.focus_row = Some(card.y);
             }
             draw_card(frame, card, quote, marker, cells, selected, settings);
+            last_card = Some(card);
+        }
+        if let Some(card) = last_card.filter(|card| card.height == CARD_ROWS as u16) {
+            let edge = Rect::new(card.x, card.bottom() - 1, card.width, 1);
+            crate::runtime::draw_bottom_edge(frame, edge, &lead, &state.edge, settings);
         }
     }
 }

@@ -919,7 +919,7 @@ impl LiveView for OptionsView {
             Constraint::Length(note_rows),
         ])
         .split(body);
-        state.title = self.panel_title(crate::runtime::frame_title_columns(area.width), settings);
+        state.title = self.panel_title(crate::runtime::frame_title_columns(state), settings);
         frame.render_widget(description, parts[0]);
         let table = self.table();
         state.selected = state.selected.min(table.rows.len().saturating_sub(1));

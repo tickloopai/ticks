@@ -828,10 +828,12 @@ impl crate::runtime::LiveView for KlineView {
             return;
         }
         if let Some(event) = &self.event {
+            let title_columns = crate::runtime::frame_title_columns(state);
             event.draw(
                 frame,
                 &self.request.symbol,
                 &mut state.title,
+                title_columns,
                 settings,
                 &self.marks,
             );

@@ -210,6 +210,10 @@ impl crate::runtime::LiveView for WatchlistView {
     fn tick(&self) -> crate::metadata::TickKind {
         crate::metadata::TickKind::Watchlist
     }
+    /// The cards carry their own borders, so the Tick shows no frame around them.
+    fn framed(&self) -> bool {
+        false
+    }
     fn title(&self) -> String {
         self.groups
             .get(self.selected_group)

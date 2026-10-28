@@ -259,6 +259,7 @@ async fn historical_options_start_and_remain_readable_without_opend() {
     for (width, height) in [(48, 16), (120, 30)] {
         let mut terminal =
             ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+        state.frame_columns = width + 2;
         terminal
             .draw(|frame| view.draw(frame, &mut state, &Settings::default()))
             .unwrap();

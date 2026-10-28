@@ -23,7 +23,7 @@ const MONITOR_COLUMNS: u16 = 30;
 /// The width of a Monitor card the user has not narrowed.
 const MONITOR_CARD_COLUMNS: u16 = 40;
 /// What the frame's bottom edge carries: the help and quit keys, or an open editor's keys.
-const STATUS_KEYS: [&str; 2] = ["q Quit", "Ctrl+C Cancel"];
+const STATUS_KEYS: [&str; 2] = [" ? ", "Ctrl+C Cancel"];
 const HELP_SCROLL_HINT: &str = "j/k more";
 /// Fields a card of the Tick's minimum rows leaves for a taller one: the event chart's window
 /// and time-zone lines rank below its release, baseline and candle, and the Reader shows its
@@ -71,6 +71,11 @@ impl Scenario {
     /// The rows a host grows the Tick's card to when it has room.
     fn maximum_rows(&self) -> Option<u16> {
         self.kind.maximum_rows()
+    }
+
+    /// Whether the Tick shows cards, the only borders it draws.
+    fn has_cards(&self) -> bool {
+        matches!(self.kind, TickKind::Quote | TickKind::Watchlist)
     }
 
     fn label(&self, columns: u16, rows: u16) -> String {
@@ -790,11 +795,24 @@ async fn every_tick_fits_the_monitor_card_sizes_inside_a_whole_frame() {
                     }
                 }
             }
-            if let Some(problem) = frame_problem(&cells) {
+            let problem = if scenario.has_cards() {
+                cards_problem(&cells)
+            } else {
+                frame_problem(&cells)
+            };
+            if let Some(problem) = problem {
                 failures.push(format!("{label} {problem}:\n{frame}"));
             }
-            let status = row(&cells, usize::from(rows) - 1);
-            if !STATUS_KEYS.iter().any(|keys| status.contains(keys)) {
+            // The keys are on the frame's bottom edge, or the last card's for a view of cards,
+            // which a help overlay covers.
+            let covered = scenario.has_cards() && scenario.keys.contains(&KeyCode::Char('?'));
+            let bottom_edge = cells
+                .iter()
+                .rev()
+                .map(|line| line.concat())
+                .find(|line| line.contains('└'))
+                .unwrap_or_default();
+            if !covered && !STATUS_KEYS.iter().any(|keys| bottom_edge.contains(keys)) {
                 failures.push(format!("{label} has no keys on its bottom edge:\n{frame}"));
             }
         }
@@ -930,7 +948,8 @@ async fn quote_cards_move_by_row_down_and_by_card_across() {
 }
 
 /// What is wrong with the Tick's frame around `cells`: an edge or corner missing, so content
-/// shows outside it, a title cut short, or a row of its own for the data state.
+/// shows outside it, a title cut short, or a mark or row of its own for the data state, which
+/// the Monitor's row shows.
 fn frame_problem(cells: &[Vec<String>]) -> Option<String> {
     let (last_row, last_column) = (cells.len() - 1, cells[0].len() - 1);
     let corners = [
@@ -952,33 +971,55 @@ fn frame_problem(cells: &[Vec<String>]) -> Option<String> {
     if row(cells, 0).contains('…') {
         return Some("cuts its title short".into());
     }
+    if row(cells, 0).contains(['●', '◌']) {
+        return Some("marks the data state on its top edge".into());
+    }
     cells
         .iter()
         .any(|line| line.concat().contains("Data received"))
         .then(|| "gives the data state a row".into())
 }
 
+/// What is wrong with a view of cards: a frame drawn around them as well, or a mark of the data
+/// state.
+fn cards_problem(cells: &[Vec<String>]) -> Option<String> {
+    let screen = text(cells);
+    if screen.contains("││") || !row(cells, 0).starts_with("┌ ") {
+        return Some("draws a frame around its cards".into());
+    }
+    screen
+        .contains(['●', '◌'])
+        .then(|| "marks the data state".into())
+}
+
 fn row(cells: &[Vec<String>], row: usize) -> String {
     cells[row].concat()
 }
 
-/// The scroll indicator: the bottom row inside the frame.
-fn indicator(cells: &[Vec<String>]) -> String {
-    let row = &cells[cells.len() - 2];
-    row[1..row.len() - 1].concat()
+/// The scroll indicator: the bottom row inside the Tick's frame, `inset` rows and columns in.
+fn indicator(cells: &[Vec<String>], inset: usize) -> String {
+    let row = &cells[cells.len() - 1 - inset];
+    row[inset..row.len() - inset].concat()
 }
 
 /// Asserts the visible rows of `narrow` are the columns of `canvas` starting at `offset`, both
-/// inside their frames; the last row inside `narrow`'s frame is its scroll indicator.
-fn assert_slice(narrow: &[Vec<String>], canvas: &[Vec<String>], offset: usize, label: &str) {
-    let columns = narrow[0].len() - 2;
-    let visible: Vec<Vec<String>> = narrow[1..narrow.len() - 2]
+/// inside their frames `inset` rows and columns in; the last row inside `narrow`'s frame is its
+/// scroll indicator.
+fn assert_slice(
+    narrow: &[Vec<String>],
+    canvas: &[Vec<String>],
+    offset: usize,
+    inset: usize,
+    label: &str,
+) {
+    let columns = narrow[0].len() - 2 * inset;
+    let visible: Vec<Vec<String>> = narrow[inset..narrow.len() - 1 - inset]
         .iter()
-        .map(|row| row[1..=columns].to_vec())
+        .map(|row| row[inset..inset + columns].to_vec())
         .collect();
-    let slice: Vec<Vec<String>> = canvas[1..canvas.len() - 1]
+    let slice: Vec<Vec<String>> = canvas[inset..canvas.len() - inset]
         .iter()
-        .map(|row| row[1 + offset..1 + offset + columns].to_vec())
+        .map(|row| row[inset + offset..inset + offset + columns].to_vec())
         .collect();
     assert_eq!(
         layout_of(&visible),
@@ -995,8 +1036,9 @@ async fn a_panel_narrower_than_the_minimum_scrolls_over_the_minimum_layout() {
     for columns in BELOW_MINIMUM {
         let largest = usize::from(minimum - columns);
         let start = render(&watchlist, columns, ROWS).await;
-        assert_slice(&start, &canvas, 0, "before scrolling");
-        let indicator = indicator(&start);
+        // The cards take the whole screen, with no frame to look inside.
+        assert_slice(&start, &canvas, 0, 0, "before scrolling");
+        let indicator = indicator(&start, 0);
         assert!(indicator.starts_with('━'), "{indicator}");
         assert!(
             // The word gives way first inside the narrowest frame.
@@ -1006,14 +1048,14 @@ async fn a_panel_narrower_than_the_minimum_scrolls_over_the_minimum_layout() {
 
         let right = vec![KeyCode::Char('>'); 2];
         let scrolled = render_keys(&watchlist, columns, ROWS, right).await;
-        assert_slice(&scrolled, &canvas, largest, "after two >");
-        let indicator = self::indicator(&scrolled);
+        assert_slice(&scrolled, &canvas, largest, 0, "after two >");
+        let indicator = self::indicator(&scrolled, 0);
         assert!(indicator.starts_with('─'), "{indicator}");
         assert!(indicator.contains("━ < >"), "{indicator}");
 
         let there_and_back = ['>', '>', '<', '<'].map(KeyCode::Char).to_vec();
         let back = render_keys(&watchlist, columns, ROWS, there_and_back).await;
-        assert_slice(&back, &canvas, 0, "after scrolling back");
+        assert_slice(&back, &canvas, 0, 0, "after scrolling back");
     }
 }
 
@@ -1024,13 +1066,13 @@ async fn the_viewport_reveals_the_kline_cursor_and_keeps_a_manual_scroll() {
     let columns = BELOW_MINIMUM[1];
     let start = render(&kline, columns, ROWS).await;
     assert!(text(&start).contains('▲'), "{}", text(&start));
-    assert!(indicator(&start).starts_with('─'), "{}", text(&start));
+    assert!(indicator(&start, 1).starts_with('─'), "{}", text(&start));
 
     let scrolled = render_keys(&kline, columns, ROWS, vec![KeyCode::Char('<'); 2]).await;
     let scrolled_text = text(&scrolled);
     assert!(!scrolled_text.contains('▲'), "{scrolled_text}");
     assert!(scrolled_text.contains("2026-"), "{scrolled_text}");
-    assert!(indicator(&scrolled).starts_with('━'), "{scrolled_text}");
+    assert!(indicator(&scrolled, 1).starts_with('━'), "{scrolled_text}");
 }
 
 #[tokio::test(start_paused = true)]
@@ -1243,4 +1285,16 @@ async fn entering_a_card_moves_none_of_its_content() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Quotes take the whole screen in their own cards, with no frame around them: which cards show,
+/// when not all fit, and the keys sit on the last card's bottom edge, taking no row of their own.
+#[tokio::test(start_paused = true)]
+async fn quote_cards_fill_the_screen_and_say_which_show_on_the_last_card() {
+    let quote = scenario(TickKind::Quote, &[], &[]);
+    let cells = render(&quote, MONITOR_COLUMNS, 6).await;
+    assert!(row(&cells, 0).starts_with("┌ 700.HK "), "{}", text(&cells));
+    let last_edge = row(&cells, 3);
+    assert!(last_edge.starts_with("└ 1–1/5 ─"), "{last_edge}");
+    assert!(last_edge.contains("q Quit"), "{last_edge}");
 }

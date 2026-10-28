@@ -138,6 +138,10 @@ impl QuoteView {
 #[async_trait::async_trait]
 impl crate::runtime::LiveView for QuoteView {
     /// The Monitor names the Tick and its symbols, so its frame needs no title of its own.
+    /// The cards carry their own borders, so the Tick shows no frame around them.
+    fn framed(&self) -> bool {
+        false
+    }
     fn title(&self) -> String {
         String::new()
     }
