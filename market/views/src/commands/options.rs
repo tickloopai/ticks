@@ -816,7 +816,7 @@ impl LiveView for OptionsView {
         Ok(true)
     }
     fn help(&self) -> &'static str {
-        "q / Ctrl+C  Quit\nBackspace  Close details, then history; stay at root\nj / k / Ctrl+N / Ctrl+P  Move\nEnter  Contract details or saved snapshot\n[ / ]  Previous / next expiry\nr  Refresh current expiry\ns  Save current observation locally\nh  Read saved history\nb / p / c  Saved before / saved after / current\na  Ask Chat with this event and observation\n?  Help\nFutu OpenD: quotes only; no trading\nMissing pre-event snapshots remain missing"
+        "Backspace  Close details, then history; stay at root\nj / k / Ctrl+N / Ctrl+P  Move\nEnter  Contract details or saved snapshot\n[ / ]  Previous / next expiry\nr  Refresh current expiry\ns  Save current observation locally\nh  Read saved history\nb / p / c  Saved before / saved after / current\na  Ask Chat with this event and observation\n?  Help\nFutu OpenD: quotes only; no trading\nMissing pre-event snapshots remain missing"
     }
     fn draw(&self, frame: &mut Frame<'_>, state: &mut ViewState, settings: &Settings) {
         let area = frame.area();

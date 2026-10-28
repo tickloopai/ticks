@@ -130,7 +130,7 @@ fn a_hosted_reader_describes_reads_calls_and_updates_over_protocol_3() {
         "# Outlook\n\nGuidance was raised.\n",
     )
     .unwrap();
-    let (mut child, mut tty, frames) = hosted_reader(directory.path(), &["./release.md"]);
+    let (mut child, _tty, frames) = hosted_reader(directory.path(), &["./release.md"]);
 
     let first = frame_where(&frames, |frame| frame["method"] == "tick/update");
     assert_eq!(
@@ -194,7 +194,7 @@ fn a_hosted_reader_describes_reads_calls_and_updates_over_protocol_3() {
             > first["params"]["seq"].as_u64().unwrap()
     );
 
-    tty.write_all(b"q").unwrap();
+    assert_eq!(unsafe { libc::kill(child.id() as i32, libc::SIGTERM) }, 0);
     wait_for_exit(&mut child);
 }
 

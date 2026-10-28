@@ -14,7 +14,8 @@ use serde_json::{Value, json};
 
 pub struct Hosted {
     pub child: Child,
-    pub tty: File,
+    /// Keeps the Tick's terminal open: closing it would hang the Tick up.
+    _tty: File,
     frames: mpsc::Receiver<Value>,
     /// Everything the Tick wrote to its terminal so far.
     screen: Arc<Mutex<Vec<u8>>>,
@@ -88,7 +89,7 @@ pub fn launch(mut command: Command) -> Hosted {
     });
     Hosted {
         child,
-        tty,
+        _tty: tty,
         frames,
         screen,
     }

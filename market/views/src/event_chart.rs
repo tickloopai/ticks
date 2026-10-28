@@ -984,11 +984,16 @@ impl EventChart {
         } else {
             "P pre R regular A post N night C auction * mixed"
         };
-        // The status row already offers Help and Quit, so a Panel too narrow for every key
+        // The status row already offers Help (and Quit), so a Panel too narrow for every key
         // keeps the chart's own keys on one line and drops that repeat.
         let keys = "v View · r / [ ] Range · e Event · Enter Detail";
         let footer = if fits(keys) {
-            vec![keys.to_owned(), "? Help · q Quit".to_owned()]
+            let general = if crate::runtime::quits_on_keys() {
+                "? Help · q Quit"
+            } else {
+                "? Help"
+            };
+            vec![keys.to_owned(), general.to_owned()]
         } else {
             vec![tickloop_ui::format::fit_hints(
                 &[

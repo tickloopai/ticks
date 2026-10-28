@@ -214,7 +214,10 @@ mod against_a_stand_in {
         );
         assert!(screen.contains("Last error:"), "{screen}");
 
-        tick.tty.write_all(b"q").unwrap();
+        assert_eq!(
+            unsafe { libc::kill(tick.child.id() as i32, libc::SIGTERM) },
+            0
+        );
         assert!(wait_for_exit(&mut tick).success(), "{}", tick.screen());
     }
 
@@ -273,7 +276,10 @@ mod against_a_stand_in {
             "the default config root is not used"
         );
         for tick in &mut ticks {
-            tick.tty.write_all(b"q").unwrap();
+            assert_eq!(
+                unsafe { libc::kill(tick.child.id() as i32, libc::SIGTERM) },
+                0
+            );
             assert!(wait_for_exit(tick).success(), "{}", tick.screen());
         }
     }
@@ -315,7 +321,10 @@ mod against_a_stand_in {
                 retrying["params"]["data"]["connection"]["state"], "retrying",
                 "{retrying}"
             );
-            tick.tty.write_all(b"q").unwrap();
+            assert_eq!(
+                unsafe { libc::kill(tick.child.id() as i32, libc::SIGTERM) },
+                0
+            );
             assert!(wait_for_exit(&mut tick).success(), "{}", tick.screen());
         }
 
@@ -365,7 +374,10 @@ mod against_a_stand_in {
                 "{retrying}"
             );
             published.push(retrying["params"]["data"].clone());
-            tick.tty.write_all(b"q").unwrap();
+            assert_eq!(
+                unsafe { libc::kill(tick.child.id() as i32, libc::SIGTERM) },
+                0
+            );
             assert!(wait_for_exit(&mut tick).success(), "{}", tick.screen());
         }
         assert_eq!(
@@ -441,7 +453,10 @@ mod against_a_stand_in {
             "{screen}"
         );
 
-        tick.tty.write_all(b"q").unwrap();
+        assert_eq!(
+            unsafe { libc::kill(tick.child.id() as i32, libc::SIGTERM) },
+            0
+        );
         assert!(wait_for_exit(&mut tick).success(), "{}", tick.screen());
     }
 }

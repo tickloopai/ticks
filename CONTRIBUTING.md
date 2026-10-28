@@ -24,10 +24,10 @@ make build           # cargo build --locked --workspace --bins
 make test            # release script tests (node --test scripts/*.test.mjs), then cargo nextest
 make check           # cargo fmt --check, clippy --all-targets -D warnings, then make test
 make package-ticks   # build into dist/ticks/<target>/<package>/ and its archive, and print the marketplace.json entries
-make dev-ticks       # package-ticks, then tickloop tick install --path dist/ticks/<host target>/<package>
+make dev-ticks       # package-ticks, then install each into the development config root ~/.tickloop-dev
 ```
 
-Run `make check` before opening a pull request. Select packages with `TICK_PACKAGES="longbridge"`; `make package-ticks` builds for this machine, or for each target in `TICK_TARGETS`, and publishes nothing. `make dev-ticks` installs with the `tickloop` on your `PATH`, or the one named by `TICKLOOP=<path>`, replacing any installed package of the same name.
+Run `make check` before opening a pull request. Select packages with `TICK_PACKAGES="longbridge"`; `make package-ticks` builds for this machine, or for each target in `TICK_TARGETS`, and publishes nothing. `make dev-ticks` installs with the `tickloop` on your `PATH`, or the one named by `TICKLOOP=<path>`, into the config root Tickloop's `make dev` uses, `~/.tickloop-dev` unless `TICKLOOP_DEV_CONFIG_DIR` names another, replacing any installed package of the same name there; a `tickloop` run with the default config root does not see them. A config root that keeps Ticks as plugins needs a `tickloop` that manages plugins, so point `TICKLOOP` at the development build, and uninstall a marketplace-installed Tick of the same name first (`tickloop tick uninstall <name> --keep-data`).
 
 `make test` isolates the tests with a throwaway Tickloop config root and disables proxies for loopback. Mirror that when running a subset:
 

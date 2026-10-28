@@ -393,7 +393,7 @@ impl LiveView for CommunityView {
         }
     }
     fn help(&self) -> &'static str {
-        "Enter  Read selected post\nBackspace  Back to list\nj / k / Ctrl+N / Ctrl+P / arrows  Move / scroll\nPageUp / PageDown  Page\ng / G  First / last\nq / Ctrl+C  Quit\n?  Help"
+        "Enter  Read selected post\nBackspace  Back to list\nj / k / Ctrl+N / Ctrl+P / arrows  Move / scroll\nPageUp / PageDown  Page\ng / G  First / last\n?  Help"
     }
     fn draw(&self, frame: &mut Frame<'_>, state: &mut ViewState, settings: &Settings) {
         if let Some(post) = self

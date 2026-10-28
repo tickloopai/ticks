@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tick_protocol::{StateDeclaration, StateSeries, TickTool};
+use tick_protocol::{ScreenDeclaration, StateDeclaration, StateSeries, TickTool};
 use tick_provider::error::{Error, Result};
 use tick_sdk::stream::Describe;
 
@@ -136,18 +136,19 @@ impl TickKind {
             Self::Watchlist => 6,
             // The price summary wrapped over four lines and the period, averages and live keys.
             Self::Kline => 14,
-            // Symbol, P/L and P/L %; the price, quantity and value give way first.
-            Self::Positions => 8,
+            // Symbol, P/L and P/L % for the selected holding and those beside it; the price,
+            // quantity and value give way first.
+            Self::Positions => 6,
             // A headline beside the time; the source gives way first.
-            Self::News => 10,
+            Self::News => 6,
             // The mode's caveat, and each table's leading two columns.
             Self::Earnings => 14,
             // Spot, ATM move, and strike with both midpoints.
             Self::Options => 14,
-            // The wrapped document heading and prose.
-            Self::Reader => 10,
+            // Prose below the frame's title; a short Panel leaves out the document heading.
+            Self::Reader => 6,
             // A post headline beside the date; the post kind gives way first.
-            Self::Community => 10,
+            Self::Community => 6,
         };
         MinimumPanelSize {
             columns: MINIMUM_PANEL_COLUMNS,
@@ -237,6 +238,9 @@ impl Describe for TickKind {
             state: (!descriptor.series.is_empty()).then_some(StateDeclaration {
                 series: descriptor.series,
             }),
+            screen: Some(ScreenDeclaration {
+                min_rows: descriptor.minimum_panel_size.map(|minimum| minimum.rows),
+            }),
         })
     }
 }
@@ -305,6 +309,29 @@ mod tests {
         ] {
             assert!(declared(kind).is_empty(), "{kind:?}");
         }
+    }
+
+    #[test]
+    fn every_tick_declares_the_rows_it_stays_usable_at_within_the_hosts_range() {
+        use tick_protocol::{MAX_SCREEN_ROWS, MIN_SCREEN_ROWS};
+        let declared = |kind: TickKind| {
+            Describe::descriptor(&kind)
+                .unwrap()
+                .screen
+                .and_then(|screen| screen.min_rows)
+        };
+        for kind in TickKind::ALL {
+            let rows = declared(kind).unwrap();
+            assert!(
+                (MIN_SCREEN_ROWS..=MAX_SCREEN_ROWS).contains(&rows),
+                "{kind:?}"
+            );
+            assert_eq!(rows, kind.minimum_panel_size().rows, "{kind:?}");
+        }
+        assert_eq!(
+            TickKind::ALL.map(declared),
+            [6, 6, 14, 6, 6, 14, 14, 6, 6].map(Some)
+        );
     }
 
     #[test]

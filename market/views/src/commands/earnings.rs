@@ -1078,7 +1078,7 @@ impl LiveView for EarningsView {
             .map_err(|error| Error::usage(error.to_string()))
     }
     fn help(&self) -> &'static str {
-        "q / Ctrl+C  Quit\n?  Help · Backspace returns one level\nj / k / Ctrl+N / Ctrl+P / arrows  Move\nEnter  Period detail / selected metric original · c  Compare\n[ / ]  Older / newer fiscal period · u  Upcoming\no  Original · p  Chart · v  Options · a  Ask Chat\nr  Market reactions · f  Period originals · R  Refresh\ns  Change symbol (Enter apply · Ctrl+C cancel)\nPageUp / PageDown  Page · g / G  First / last\nEstimates retrieved now; no verified historical snapshot\nUS symbols · 60s near release, 15m upcoming, daily history"
+        "?  Help · Backspace returns one level\nj / k / Ctrl+N / Ctrl+P / arrows  Move\nEnter  Period detail / selected metric original · c  Compare\n[ / ]  Older / newer fiscal period · u  Upcoming\no  Original · p  Chart · v  Options · a  Ask Chat\nr  Market reactions · f  Period originals · R  Refresh\ns  Change symbol (Enter apply · Ctrl+C cancel)\nPageUp / PageDown  Page · g / G  First / last\nEstimates retrieved now; no verified historical snapshot\nUS symbols · 60s near release, 15m upcoming, daily history"
     }
     fn draw(&self, frame: &mut Frame<'_>, state: &mut ViewState, settings: &Settings) {
         if self.reset_scroll.replace(false) {

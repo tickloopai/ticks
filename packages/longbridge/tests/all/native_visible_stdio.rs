@@ -57,7 +57,10 @@ fn a_hosted_kline_describes_reads_calls_and_updates_over_protocol_3() {
     });
     assert_eq!(marked["params"]["data"]["marks"][0]["label"], "live");
 
-    tick.tty.write_all(b"q").unwrap();
+    assert_eq!(
+        unsafe { libc::kill(tick.child.id() as i32, libc::SIGTERM) },
+        0
+    );
     let deadline = Instant::now() + Duration::from_secs(5);
     while tick.child.try_wait().unwrap().is_none() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));

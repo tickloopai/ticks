@@ -5,7 +5,8 @@ use futures_util::{Stream, StreamExt, stream::FuturesUnordered};
 use ratatui::{
     Frame, Terminal,
     backend::Backend,
-    layout::{Rect, Size},
+    buffer::Buffer,
+    layout::{Position, Rect, Size},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 use serde_json::{Value, json};
@@ -28,6 +29,8 @@ const WIDE_PANEL_COLUMNS: u16 = 64;
 const TALL_PANEL_ROWS: u16 = 10;
 const HELP_TITLE: &str = " Keys · ? / Backspace close ";
 const NARROW_HELP_TITLE: &str = " Keys · ? close ";
+/// Under a help overlay too short for every key.
+const HELP_SCROLL_HINT: &str = " j/k more ";
 pub const CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 pub const REFRESH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 /// A Tick Tool call runs beside the view, so both the number in flight and how
@@ -35,8 +38,23 @@ pub const REFRESH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 pub const TOOL_CALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 pub const MAX_CONCURRENT_TOOL_CALLS: usize = 4;
 
+/// The help line for the keys that quit a standalone Tick.
+const QUIT_HELP: &str = "q / Ctrl+C  Quit";
+
+/// Whether a host launched this process as a Tick Instance.
+pub fn in_instance() -> bool {
+    std::env::var_os(tick_protocol::INSTANCE_ID_ENV).is_some()
+}
+
+/// Whether the keys quit the Tick. A host ends the Ticks it runs itself and shows them in cards
+/// where a stray q or Ctrl+C must not end one, so a hosted Tick quits on no key.
+pub fn quits_on_keys() -> bool {
+    !in_instance()
+}
+
 pub fn is_exit(event: &Event) -> bool {
-    matches!(event, Event::Key(key) if key.kind != KeyEventKind::Release && (key.code == KeyCode::Char('q') || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))))
+    quits_on_keys()
+        && matches!(event, Event::Key(key) if key.kind != KeyEventKind::Release && (key.code == KeyCode::Char('q') || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))))
 }
 
 pub struct NoMarketApi;
@@ -81,6 +99,8 @@ pub struct ViewState {
     pub selected: usize,
     pub offset: usize,
     pub help: bool,
+    /// How many lines of the help overlay are scrolled past; a short Panel scrolls its keys.
+    pub help_offset: u16,
     pub connection: ConnectionState,
     pub last_error: Option<String>,
     /// The canvas column and row of what the view has focused in this frame; a scrolling
@@ -95,6 +115,7 @@ impl Default for ViewState {
             selected: 0,
             offset: 0,
             help: false,
+            help_offset: 0,
             connection: ConnectionState::Connected,
             last_error: None,
             focus_column: None,
@@ -181,7 +202,7 @@ pub trait LiveView: Send {
         )))
     }
     fn help(&self) -> &'static str {
-        "q / Ctrl+C  Quit\n?  Help\nj / k / Ctrl+N / Ctrl+P / arrows  Move\nPageUp / PageDown  Page\ng / G  First / last"
+        "?  Help\nj / k / Ctrl+N / Ctrl+P / arrows  Move\nPageUp / PageDown  Page\ng / G  First / last"
     }
     /// While an in-Panel editor is open the view owns every printable key and Backspace, and
     /// Ctrl+C cancels the edit instead of quitting.
@@ -313,6 +334,7 @@ pub async fn run<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event
     let mut running_calls = FuturesUnordered::new();
     let mut state = ViewState::default();
     let mut viewport = ScrollViewport::default();
+    let mut shown = None;
     let mut market_open = true;
     let mut frames = tokio::time::interval(FRAME_INTERVAL);
     frames.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -376,7 +398,7 @@ pub async fn run<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event
                 _ = refreshes.tick(), if configured_refresh.is_some() => {
                     if state.connection != ConnectionState::Connected {
                         state.connection = ConnectionState::Reconnecting;
-                        render(view, terminal, &mut state, &mut viewport, settings)?;
+                        render(view, terminal, &mut state, &mut viewport, &mut shown, settings)?;
                     }
                     match refresh_cancellable(view, api, &mut input).await {
                         Ok(None) => break,
@@ -386,7 +408,7 @@ pub async fn run<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event
                     dirty = true;
                 }
                 _ = frames.tick() => {
-                    if dirty { render(view, terminal, &mut state, &mut viewport, settings)?; dirty = false; }
+                    if dirty { render(view, terminal, &mut state, &mut viewport, &mut shown, settings)?; dirty = false; }
                 }
                 event = market.recv(), if market_open => {
                     dirty = true;
@@ -398,7 +420,7 @@ pub async fn run<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event
                                     let recovered = connection == ConnectionState::Connected && state.connection != ConnectionState::Connected;
                                     if recovered && view.refresh_on_recovery() {
                                         state.connection = ConnectionState::Reconnecting;
-                                        render(view, terminal, &mut state, &mut viewport, settings)?;
+                                        render(view, terminal, &mut state, &mut viewport, &mut shown, settings)?;
                                         match refresh_cancellable(view, api, &mut input).await {
                                             Ok(None) => break,
                                             Ok(Some(())) => { state.received_data(); updates.publish(view.content())?; }
@@ -428,15 +450,29 @@ pub async fn run<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event
                     match event {
                         None => break,
                         Some(Err(error)) => return Err(error.into()),
-                        Some(Ok(Event::Resize(_, _))) => { terminal.clear().map_err(|error| Error::usage(error.to_string()))?; }
+                        Some(Ok(Event::Resize(_, _))) => { terminal.clear().map_err(|error| Error::usage(error.to_string()))?; shown = None; }
                         Some(Ok(Event::Key(key))) if key.kind != KeyEventKind::Release => {
                             let capturing = view.captures_text();
                             let interrupted = key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL);
                             if interrupted && capturing { view.cancel_text(); continue; }
-                            if interrupted { break; }
-                            if !capturing && key.code == KeyCode::Char('q') { break; }
-                            if !capturing && key.code == KeyCode::Char('?') { state.help = !state.help; continue; }
-                            if state.help { if key.code == KeyCode::Backspace { state.help = false; } continue; }
+                            if !capturing && is_exit(&Event::Key(key)) { break; }
+                            if !capturing && key.code == KeyCode::Char('?') { state.help = !state.help; state.help_offset = 0; continue; }
+                            if state.help {
+                                let control = key.modifiers.contains(KeyModifiers::CONTROL);
+                                let page = terminal.size().map_err(|error| Error::usage(error.to_string()))?.height.saturating_sub(3).max(1);
+                                // The renderer clamps the offset to the keys the overlay holds.
+                                match (key.code, control) {
+                                    (KeyCode::Backspace, false) => state.help = false,
+                                    (KeyCode::Char('j') | KeyCode::Down, false) | (KeyCode::Char('n'), true) => state.help_offset = state.help_offset.saturating_add(1),
+                                    (KeyCode::Char('k') | KeyCode::Up, false) | (KeyCode::Char('p'), true) => state.help_offset = state.help_offset.saturating_sub(1),
+                                    (KeyCode::PageDown, false) => state.help_offset = state.help_offset.saturating_add(page),
+                                    (KeyCode::PageUp, false) => state.help_offset = state.help_offset.saturating_sub(page),
+                                    (KeyCode::Char('g') | KeyCode::Home, false) => state.help_offset = 0,
+                                    (KeyCode::Char('G') | KeyCode::End, false) => state.help_offset = u16::MAX,
+                                    _ => (),
+                                }
+                                continue;
+                            }
                             if !capturing && let KeyCode::Char(character) = key.code && viewport.handle_key(character) { continue; }
                             let code = if key.modifiers.contains(KeyModifiers::CONTROL) {
                                 match key.code {
@@ -481,7 +517,7 @@ pub async fn run<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event
             }
         }
         if dirty {
-            render(view, terminal, &mut state, &mut viewport, settings)?;
+            render(view, terminal, &mut state, &mut viewport, &mut shown, settings)?;
         }
         Ok(())
     }
@@ -495,16 +531,54 @@ pub async fn run<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event
     outcome
 }
 
+/// The screen as last written to the terminal, with its cursor.
+type ShownScreen = Option<(Buffer, Option<Position>)>;
+
+/// Composes the screen in memory and writes it only when it differs from the one last written,
+/// so a frame with no change sends the terminal nothing; a resize clears `shown` and the next
+/// frame is written whole.
+/// How many times a frame is composed again when the terminal keeps resizing while it is written;
+/// the SIGWINCH of a later change redraws it after that.
+const RESIZED_FRAME_ATTEMPTS: usize = 4;
+
 fn render<V: LiveView, B: Backend>(
     view: &V,
     terminal: &mut Terminal<B>,
     state: &mut ViewState,
     viewport: &mut ScrollViewport,
+    shown: &mut ShownScreen,
     settings: &Settings,
 ) -> Result<()> {
-    let size = terminal
-        .size()
+    for _ in 0..RESIZED_FRAME_ATTEMPTS {
+        if render_once(view, terminal, state, viewport, shown, settings)? {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Writes one frame, and whether it was written whole: false when the terminal resized after the
+/// frame was composed.
+fn render_once<V: LiveView, B: Backend>(
+    view: &V,
+    terminal: &mut Terminal<B>,
+    state: &mut ViewState,
+    viewport: &mut ScrollViewport,
+    shown: &mut ShownScreen,
+    settings: &Settings,
+) -> Result<bool> {
+    // A terminal that changed size since the last frame is cleared and drawn whole, never diffed
+    // against a frame of another size.
+    terminal
+        .autoresize()
         .map_err(|error| Error::usage(error.to_string()))?;
+    let size = terminal.get_frame().area().as_size();
+    if shown
+        .as_ref()
+        .is_some_and(|(buffer, _)| buffer.area.as_size() != size)
+    {
+        *shown = None;
+    }
     let minimum = view.minimum_panel_size();
     viewport.set_layout(ViewportLayout::of(
         Rect::new(0, 0, size.width, size.height),
@@ -525,66 +599,97 @@ fn render<V: LiveView, B: Backend>(
         }
         None => None,
     };
-    terminal
-        .draw(|frame| {
-            let styles = settings.styles();
-            match &canvas {
-                None => draw_canvas(view, frame, state, settings),
-                Some((buffer, cursor)) => {
-                    let area = frame.area();
-                    frame.buffer_mut().set_style(area, styles.canvas);
-                    viewport.render(buffer, frame.buffer_mut(), styles, settings.ambiguous_width);
-                    if let Some(cursor) = cursor.and_then(|cursor| viewport.on_panel(cursor)) {
-                        frame.set_cursor_position(cursor);
-                    }
+    let Ok(mut screen) = Terminal::new(CanvasBackend::new(size));
+    let Ok(_) = screen.draw(|frame| {
+        let styles = settings.styles();
+        match &canvas {
+            None => draw_canvas(view, frame, state, settings),
+            Some((buffer, cursor)) => {
+                let area = frame.area();
+                frame.buffer_mut().set_style(area, styles.canvas);
+                viewport.render(buffer, frame.buffer_mut(), styles, settings.ambiguous_width);
+                if let Some(cursor) = cursor.and_then(|cursor| viewport.on_panel(cursor)) {
+                    frame.set_cursor_position(cursor);
                 }
             }
-            if state.help {
-                let area = frame.area();
-                let help = Paragraph::new(match viewport.help() {
-                    Some(scroll_keys) => format!("{}\n{scroll_keys}", view.help()),
-                    None => view.help().to_owned(),
-                })
-                .block(
-                    Block::default()
-                        .title(
-                            if width(HELP_TITLE, settings.ambiguous_width) + 4
-                                <= usize::from(area.width)
-                            {
-                                HELP_TITLE
-                            } else {
-                                NARROW_HELP_TITLE
-                            },
-                        )
-                        .borders(Borders::ALL)
-                        .border_style(styles.border),
+        }
+        if state.help {
+            let area = frame.area();
+            let mut keys = view.help().to_owned();
+            if quits_on_keys() {
+                keys = format!("{QUIT_HELP}\n{keys}");
+            }
+            if let Some(scroll_keys) = viewport.help() {
+                keys = format!("{keys}\n{scroll_keys}");
+            }
+            let block = Block::default()
+                .title(
+                    if width(HELP_TITLE, settings.ambiguous_width) + 4 <= usize::from(area.width) {
+                        HELP_TITLE
+                    } else {
+                        NARROW_HELP_TITLE
+                    },
                 )
+                .borders(Borders::ALL)
+                .border_style(styles.border);
+            let help = Paragraph::new(keys)
+                .block(block.clone())
                 .wrap(Wrap { trim: false })
                 .style(styles.overlay_base());
-                // A narrow Panel grows the overlay toward its edges before wrapping the keys.
-                let width = (area.width * 3 / 4).max(
-                    u16::try_from(help.line_width())
-                        .unwrap_or(u16::MAX)
-                        .min(area.width.saturating_sub(2)),
-                );
-                let height = (area.height * 3 / 4).max(
-                    u16::try_from(help.line_count(width))
-                        .unwrap_or(u16::MAX)
-                        .min(area.height.saturating_sub(2)),
-                );
-                let popup = Rect::new(
-                    area.x + (area.width / 8).min((area.width - width) / 2),
-                    area.y + (area.height / 8).min((area.height - height) / 2),
-                    width,
-                    height,
-                );
-                frame.render_widget(Clear, popup);
-                frame.buffer_mut().set_style(popup, styles.overlay_base());
-                frame.render_widget(help, popup);
+            // A narrow Panel grows the overlay toward its edges before wrapping the keys.
+            let width = (area.width * 3 / 4).max(
+                u16::try_from(help.line_width())
+                    .unwrap_or(u16::MAX)
+                    .min(area.width.saturating_sub(2)),
+            );
+            let lines = u16::try_from(help.line_count(width)).unwrap_or(u16::MAX);
+            // A short Panel gives the overlay every row above the status row and scrolls the keys.
+            let height = (area.height * 3 / 4).max(lines.min(area.height.saturating_sub(1)));
+            let hidden = lines.saturating_sub(height);
+            state.help_offset = state.help_offset.min(hidden);
+            let help = if hidden == 0 {
+                help
+            } else {
+                help.block(block.title_bottom(HELP_SCROLL_HINT))
+                    .scroll((state.help_offset, 0))
+            };
+            let popup = Rect::new(
+                area.x + (area.width / 8).min((area.width - width) / 2),
+                area.y + (area.height / 8).min((area.height - height) / 2),
+                width,
+                height,
+            );
+            frame.render_widget(Clear, popup);
+            frame.buffer_mut().set_style(popup, styles.overlay_base());
+            frame.render_widget(help, popup);
+        }
+    });
+    let composed = (screen.backend().buffer().clone(), screen.backend().cursor());
+    if shown.as_ref() == Some(&composed) {
+        return Ok(true);
+    }
+    let mut whole = true;
+    terminal
+        .draw(|frame| {
+            let area = frame.area();
+            if area == composed.0.area {
+                frame.buffer_mut().clone_from(&composed.0);
+                if let Some(cursor) = composed.1 {
+                    frame.set_cursor_position(cursor);
+                }
+                return;
+            }
+            // The terminal resized after the screen was composed: show what still fits until the
+            // frame is composed again for the new size.
+            whole = false;
+            let overlap = area.intersection(composed.0.area);
+            for position in overlap.positions() {
+                frame.buffer_mut()[position] = composed.0[position].clone();
             }
         })
         .map_err(|error| Error::usage(error.to_string()))?;
-    Ok(())
+    *shown = whole.then_some(composed);
+    Ok(whole)
 }
 
 /// Draws the view and the status row into the frame, which is the Panel itself or, for a Panel
@@ -628,6 +733,8 @@ fn draw_canvas<V: LiveView>(
         "Enter Apply  Ctrl+C Cancel"
     } else if view.captures_text() {
         "Ctrl+C Cancel"
+    } else if !quits_on_keys() {
+        "? Help"
     } else if area.width >= 40 {
         "? Help  q Quit"
     } else {
@@ -757,16 +864,30 @@ pub fn draw_connecting<B: Backend>(
     Ok(())
 }
 
+/// The status hint for the keys that quit a standalone Tick.
+pub const QUIT_HINT: &str = "q Quit";
+
+/// `hints` less a trailing [`QUIT_HINT`] when the keys do not quit the Tick.
+pub fn standalone_hints<'a, 'b>(
+    hints: &'a [tickloop_ui::format::Hint<'b>],
+) -> &'a [tickloop_ui::format::Hint<'b>] {
+    match hints.split_last() {
+        Some((last, rest)) if last.full == QUIT_HINT && !quits_on_keys() => rest,
+        _ => hints,
+    }
+}
+
 /// The key line under a list of articles or posts; a narrow Panel drops the keys the status row
 /// already offers.
 pub fn reading_list_keys(columns: usize, settings: &Settings) -> String {
     use tickloop_ui::format::{Hint, fit_hints};
+    let hints = [
+        Hint::whole("Enter Read"),
+        Hint::whole("? Help"),
+        Hint::whole(QUIT_HINT),
+    ];
     fit_hints(
-        &[
-            Hint::whole("Enter Read"),
-            Hint::whole("? Help"),
-            Hint::whole("q Quit"),
-        ],
+        standalone_hints(&hints),
         "  ·  ",
         columns,
         settings.ambiguous_width,
@@ -776,12 +897,13 @@ pub fn reading_list_keys(columns: usize, settings: &Settings) -> String {
 /// The key line under an open article or post.
 pub fn reading_keys(columns: usize, settings: &Settings) -> String {
     use tickloop_ui::format::{Hint, fit_hints};
+    let hints = [
+        Hint::whole("Backspace Back"),
+        Hint::whole("j/k Scroll"),
+        Hint::whole(QUIT_HINT),
+    ];
     fit_hints(
-        &[
-            Hint::whole("Backspace Back"),
-            Hint::whole("j/k Scroll"),
-            Hint::whole("q Quit"),
-        ],
+        standalone_hints(&hints),
         " · ",
         columns,
         settings.ambiguous_width,

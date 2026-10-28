@@ -20,6 +20,12 @@ const LAPTOP: (u16, u16) = (80, 24);
 /// The narrowest Panel every Tick is laid out for at all: Tickloop's narrowest Monitor column,
 /// 32 columns less its separator.
 const MONITOR_COLUMNS: u16 = 30;
+/// The width of a Monitor card the user has not narrowed.
+const MONITOR_CARD_COLUMNS: u16 = 40;
+/// What the status row on the bottom line ends with: the help and quit keys, or an open
+/// editor's keys.
+const STATUS_KEYS: [&str; 2] = ["q Quit", "Ctrl+C Cancel"];
+const HELP_SCROLL_HINT: &str = "j/k more";
 /// Narrower than any Tick's minimum, so the Panel scrolls over the minimum layout.
 const BELOW_MINIMUM: [u16; 2] = [24, 20];
 /// The width the Ticks were laid out for before 80 columns became the target.
@@ -314,11 +320,7 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
         scenario(
             TickKind::Quote,
             &[KeyCode::Char('?')],
-            &[
-                "Keys · ? close",
-                "PageUp / PageDown  Page",
-                "g / G  First / last",
-            ],
+            &["Keys · ?", "PageUp / PageDown  Page", "g / G  First / last"],
         ),
         scenario(
             TickKind::Watchlist,
@@ -763,6 +765,49 @@ async fn every_tick_holds_its_layout_at_its_full_minimum_size() {
     }
 }
 
+/// A Monitor card is 40 columns unless the user narrows it to 30, and at least the Tick's
+/// minimum rows tall; taller when it has room. The layout holds without scrolling the canvas and
+/// keeps the status row on the bottom line; what a short card leaves below the fold, such as
+/// an article's body or the positions' totals, the Tick's own keys scroll to.
+#[tokio::test(start_paused = true)]
+async fn every_tick_fits_the_monitor_card_sizes_with_its_status_row_at_the_bottom() {
+    let mut failures = Vec::new();
+    for scenario in every_tick_at_the_minimum_width() {
+        let rows = scenario.minimum().rows;
+        for (columns, rows) in [
+            (MONITOR_COLUMNS, rows),
+            (MONITOR_CARD_COLUMNS, rows),
+            (MONITOR_CARD_COLUMNS, rows + 6),
+        ] {
+            let cells = render(&scenario, columns, rows).await;
+            let frame = text(&cells);
+            let label = scenario.label(columns, rows);
+            if frame.contains(SCROLL_HINT) {
+                failures.push(format!("{label} scrolls:\n{frame}"));
+            }
+            let status = row(&cells, usize::from(rows) - 1);
+            if !STATUS_KEYS.iter().any(|keys| status.contains(keys)) {
+                failures.push(format!("{label} has no status row at the bottom:\n{frame}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_help_overlay_too_short_for_every_key_scrolls_them() {
+    let rows = TickKind::Quote.minimum_panel_size().rows;
+    let help = |keys: &[KeyCode]| scenario(TickKind::Quote, keys, &[]);
+    let top = text(&render(&help(&[KeyCode::Char('?')]), MONITOR_COLUMNS, rows).await);
+    assert!(top.contains(HELP_SCROLL_HINT), "{top}");
+    assert!(!top.contains("g / G  First / last"), "{top}");
+    let end = help(&[KeyCode::Char('?'), KeyCode::Char('G')]);
+    let bottom = text(&render(&end, MONITOR_COLUMNS, rows).await);
+    assert!(bottom.contains("g / G  First / last"), "{bottom}");
+    let back = help(&[KeyCode::Char('?'), KeyCode::Char('G'), KeyCode::Char('g')]);
+    assert_eq!(text(&render(&back, MONITOR_COLUMNS, rows).await), top);
+}
+
 #[tokio::test(start_paused = true)]
 async fn the_shortest_narrow_event_chart_keeps_its_popups_way_out_and_the_reader_its_prose() {
     let event = |keys: &[KeyCode]| Scenario {
@@ -944,22 +989,23 @@ async fn the_viewport_reveals_the_kline_cursor_and_keeps_a_manual_scroll() {
 
 #[tokio::test(start_paused = true)]
 async fn a_panel_shorter_than_the_minimum_scrolls_vertically_and_follows_the_selection() {
-    let positions = scenario(TickKind::Positions, &[], &[]);
-    let minimum = positions.minimum();
-    let rows = minimum.rows - 2;
-    let start = text(&render(&positions, minimum.columns, rows).await);
-    assert!(start.contains("↕ 1–5/8 { } scroll"), "{start}");
-    assert!(start.contains(">TSLA.US"), "{start}");
+    let earnings = scenario(TickKind::Earnings, &[], &[]);
+    let minimum = earnings.minimum();
+    let rows = minimum.rows - 4;
+    let start = text(&render(&earnings, minimum.columns, rows).await);
+    assert!(start.contains("↕ 1–"), "{start}");
+    assert!(start.contains(">Q2 2026"), "{start}");
+    assert!(!start.contains("Q3 2024"), "{start}");
 
-    let down = vec![KeyCode::Char('j'); 4];
-    let followed = text(&render_keys(&positions, minimum.columns, rows, down.clone()).await);
-    assert!(followed.contains(">Total USD"), "{followed}");
-    assert!(followed.contains("↕ 3–7/8"), "{followed}");
+    let down = vec![KeyCode::Char('j'); 7];
+    let followed = text(&render_keys(&earnings, minimum.columns, rows, down.clone()).await);
+    assert!(followed.contains(">Q3 2024"), "{followed}");
+    assert!(!followed.contains("↕ 1–"), "{followed}");
 
-    let manual = [down, vec![KeyCode::Char('{')]].concat();
-    let scrolled = text(&render_keys(&positions, minimum.columns, rows, manual).await);
-    assert!(scrolled.contains("↕ 1–5/8"), "{scrolled}");
-    assert!(!scrolled.contains("Total USD"), "{scrolled}");
+    let manual = [down, vec![KeyCode::Char('{'); 4]].concat();
+    let scrolled = text(&render_keys(&earnings, minimum.columns, rows, manual).await);
+    assert!(scrolled.contains("↕ 1–"), "{scrolled}");
+    assert!(!scrolled.contains("Q3 2024"), "{scrolled}");
 }
 
 #[tokio::test(start_paused = true)]

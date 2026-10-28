@@ -56,10 +56,7 @@ pub fn run<C: Parser, F: Future<Output = Result<()>>>(execute: impl FnOnce(C) ->
     }
 }
 
-/// Whether a host launched this process as a Tick Instance.
-pub fn in_instance() -> bool {
-    std::env::var_os(tick_protocol::INSTANCE_ID_ENV).is_some()
-}
+pub use tick_market::runtime::in_instance;
 
 /// Refuses to run a command that runs once and exits, such as `--once` or `describe`, in a Tick
 /// Instance: the host launched this process for a live Tick.

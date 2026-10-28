@@ -98,6 +98,33 @@ fn next(receiver: &mpsc::Receiver<Value>) -> Value {
     receiver.recv_timeout(Duration::from_secs(10)).unwrap()
 }
 
+/// A host shows the Tick in a card and ends it itself: q and Ctrl+C reach the card as keys, so
+/// neither ends the Tick, and Esc, which leaves the card, does nothing in it.
+#[test]
+fn a_hosted_tick_quits_on_no_key() {
+    let (mut child, mut tty, frames, _screen) = visible_kline();
+    assert_eq!(next(&frames)["method"], "tick/update");
+    std::thread::sleep(Duration::from_millis(200));
+    for key in [&b"q"[..], b"\x03", b"\x1b"] {
+        tty.write_all(key).unwrap();
+        std::thread::sleep(Duration::from_millis(250));
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "{key:?} ended the Tick"
+        );
+    }
+    tty.write_all(b"5").unwrap();
+    let switched = loop {
+        let frame = next(&frames);
+        if frame["method"] == "tick/update" && frame["params"]["data"]["period"] == "5m" {
+            break frame;
+        }
+    };
+    assert_eq!(switched["params"]["data"]["period"], "5m");
+    assert_eq!(unsafe { libc::kill(child.id() as i32, libc::SIGTERM) }, 0);
+    assert!(child.wait().unwrap().success());
+}
+
 #[test]
 fn standalone_escape_does_not_swallow_the_next_key() {
     let (mut child, mut tty, frames, screen) = visible_kline();
@@ -113,7 +140,7 @@ fn standalone_escape_does_not_swallow_the_next_key() {
         }
     };
     assert_eq!(switched["params"]["data"]["period"], "5m");
-    tty.write_all(b"q").unwrap();
+    assert_eq!(unsafe { libc::kill(child.id() as i32, libc::SIGTERM) }, 0);
 
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     while child.try_wait().unwrap().is_none() && std::time::Instant::now() < deadline {
@@ -187,6 +214,7 @@ fn visible_kline_keyboard_and_tool_share_the_same_stdio_instance() {
     };
     assert_eq!(describe["result"]["protocol"], 3);
     assert_eq!(describe["result"]["kind"], "kline");
+    assert_eq!(describe["result"]["screen"], json!({"min_rows": 14}));
     assert!(
         describe["result"]["tools"]
             .as_array()
@@ -310,7 +338,7 @@ fn visible_kline_keyboard_and_tool_share_the_same_stdio_instance() {
         unsafe { libc::ioctl(tty.as_raw_fd(), libc::TIOCSWINSZ, &size) },
         0
     );
-    tty.write_all(b"q").unwrap();
+    assert_eq!(unsafe { libc::kill(child.id() as i32, libc::SIGTERM) }, 0);
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     while child.try_wait().unwrap().is_none() && std::time::Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));
@@ -318,7 +346,7 @@ fn visible_kline_keyboard_and_tool_share_the_same_stdio_instance() {
     if child.try_wait().unwrap().is_none() {
         child.kill().unwrap();
         child.wait().unwrap();
-        panic!("Tick did not exit after a pending terminal redraw and q");
+        panic!("Tick did not exit at SIGTERM after a pending terminal redraw");
     }
     assert!(child.wait().unwrap().success());
 }
@@ -342,6 +370,18 @@ fn native_terminal_restores_after_resize_and_termination_signal() {
     std::thread::sleep(Duration::from_millis(150));
     assert!(screen.lock().unwrap().len() > before_resize);
     assert_eq!(unsafe { libc::kill(child.id() as i32, libc::SIGTERM) }, 0);
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while child.try_wait().unwrap().is_none() && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    if child.try_wait().unwrap().is_none() {
+        child.kill().unwrap();
+        child.wait().unwrap();
+        panic!(
+            "Tick did not exit at SIGTERM after a resize: {}",
+            String::from_utf8_lossy(&screen.lock().unwrap())
+        );
+    }
     assert!(child.wait().unwrap().success());
     std::thread::sleep(Duration::from_millis(50));
     let rendered = screen.lock().unwrap();

@@ -210,3 +210,291 @@ async fn the_tick_title_shows_and_card_values_meet_the_card_edges() {
     assert!(lines[4].contains("│+10.00 "), "{}", lines[4]);
     assert!(lines[4].contains("Permission denied"), "{}", lines[4]);
 }
+
+/// A terminal that counts the frames written to it: Ratatui shows or hides the cursor once per
+/// frame it writes, even when no cell changed.
+struct CountingBackend {
+    inner: TestBackend,
+    frames: usize,
+    clears: usize,
+}
+
+impl CountingBackend {
+    fn new(columns: u16, rows: u16) -> Self {
+        Self {
+            inner: TestBackend::new(columns, rows),
+            frames: 0,
+            clears: 0,
+        }
+    }
+}
+
+impl ratatui::backend::Backend for CountingBackend {
+    type Error = <TestBackend as ratatui::backend::Backend>::Error;
+
+    fn draw<'a, I>(&mut self, content: I) -> std::result::Result<(), Self::Error>
+    where
+        I: Iterator<Item = (u16, u16, &'a ratatui::buffer::Cell)>,
+    {
+        self.inner.draw(content)
+    }
+    fn hide_cursor(&mut self) -> std::result::Result<(), Self::Error> {
+        self.frames += 1;
+        self.inner.hide_cursor()
+    }
+    fn show_cursor(&mut self) -> std::result::Result<(), Self::Error> {
+        self.frames += 1;
+        self.inner.show_cursor()
+    }
+    fn get_cursor_position(
+        &mut self,
+    ) -> std::result::Result<ratatui::layout::Position, Self::Error> {
+        self.inner.get_cursor_position()
+    }
+    fn set_cursor_position<P: Into<ratatui::layout::Position>>(
+        &mut self,
+        position: P,
+    ) -> std::result::Result<(), Self::Error> {
+        self.inner.set_cursor_position(position)
+    }
+    fn clear(&mut self) -> std::result::Result<(), Self::Error> {
+        self.clears += 1;
+        self.inner.clear()
+    }
+    fn clear_region(
+        &mut self,
+        clear_type: ratatui::backend::ClearType,
+    ) -> std::result::Result<(), Self::Error> {
+        self.clears += usize::from(clear_type == ratatui::backend::ClearType::All);
+        self.inner.clear_region(clear_type)
+    }
+    fn size(&self) -> std::result::Result<ratatui::layout::Size, Self::Error> {
+        self.inner.size()
+    }
+    fn window_size(&mut self) -> std::result::Result<ratatui::backend::WindowSize, Self::Error> {
+        self.inner.window_size()
+    }
+    fn flush(&mut self) -> std::result::Result<(), Self::Error> {
+        self.inner.flush()
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unchanged_screen_is_not_written_again_and_a_resize_redraws_it_whole() {
+    let (_push, market) = tokio::sync::mpsc::unbounded_channel();
+    let api = Quotes(Mutex::new(Some(market)));
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        let key = |code| Ok(Event::Key(KeyEvent::new(code, KeyModifiers::NONE)));
+        // Keys no Quote view binds, a resize, then quit; each arrives on a frame of its own.
+        for event in [
+            key(KeyCode::F(12)),
+            key(KeyCode::F(12)),
+            key(KeyCode::Char('x')),
+            Ok(Event::Resize(40, 12)),
+            key(KeyCode::Char('q')),
+        ] {
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+            sender.send(event).unwrap();
+        }
+    });
+    let mut terminal = Terminal::new(CountingBackend::new(40, 12)).unwrap();
+    quote::run_live(
+        &QuoteArgs {
+            symbols: vec!["AAPL.US".into()],
+            output: OnceArgs::default(),
+        },
+        &api,
+        &Settings::default(),
+        &mut terminal,
+        tokio_stream::wrappers::UnboundedReceiverStream::new(receiver),
+        &mut TickStream::in_memory(TickKind::Quote),
+    )
+    .await
+    .unwrap();
+    let backend = terminal.backend();
+    assert_eq!(backend.clears, 1, "the resize clears the terminal once");
+    assert_eq!(
+        backend.frames, 2,
+        "only the first frame and the one after the resize are written"
+    );
+}
+
+type Keys = tokio::sync::mpsc::UnboundedSender<std::io::Result<Event>>;
+type Sizes = std::sync::Arc<Mutex<std::collections::VecDeque<ratatui::layout::Size>>>;
+
+/// A terminal a user drags through sizes. The front of `sizes` is the current size, and each time
+/// the size is asked for the drag moves on to the next queued one and signals the resize, as
+/// SIGWINCH does after the change: sizes queued together change between asking for the size and
+/// writing a frame of it.
+struct DraggedBackend {
+    inner: TestBackend,
+    sizes: Sizes,
+    signals: Keys,
+}
+
+impl ratatui::backend::Backend for DraggedBackend {
+    type Error = <TestBackend as ratatui::backend::Backend>::Error;
+
+    fn draw<'a, I>(&mut self, content: I) -> std::result::Result<(), Self::Error>
+    where
+        I: Iterator<Item = (u16, u16, &'a ratatui::buffer::Cell)>,
+    {
+        let size = self.sizes.lock().unwrap()[0];
+        if self.inner.size()? != size {
+            self.inner.resize(size.width, size.height);
+        }
+        // Cells of a frame composed before the latest change may fall outside the terminal.
+        let content: Vec<_> = content
+            .filter(|(x, y, _)| *x < size.width && *y < size.height)
+            .collect();
+        self.inner.draw(content.into_iter())
+    }
+    fn hide_cursor(&mut self) -> std::result::Result<(), Self::Error> {
+        self.inner.hide_cursor()
+    }
+    fn show_cursor(&mut self) -> std::result::Result<(), Self::Error> {
+        self.inner.show_cursor()
+    }
+    fn get_cursor_position(
+        &mut self,
+    ) -> std::result::Result<ratatui::layout::Position, Self::Error> {
+        self.inner.get_cursor_position()
+    }
+    fn set_cursor_position<P: Into<ratatui::layout::Position>>(
+        &mut self,
+        position: P,
+    ) -> std::result::Result<(), Self::Error> {
+        self.inner.set_cursor_position(position)
+    }
+    fn clear(&mut self) -> std::result::Result<(), Self::Error> {
+        self.inner.clear()
+    }
+    fn clear_region(
+        &mut self,
+        clear_type: ratatui::backend::ClearType,
+    ) -> std::result::Result<(), Self::Error> {
+        self.inner.clear_region(clear_type)
+    }
+    fn size(&self) -> std::result::Result<ratatui::layout::Size, Self::Error> {
+        let mut sizes = self.sizes.lock().unwrap();
+        if sizes.len() > 1 {
+            sizes.pop_front();
+            let _ = self
+                .signals
+                .send(Ok(Event::Resize(sizes[0].width, sizes[0].height)));
+        }
+        Ok(sizes[0])
+    }
+    fn window_size(&mut self) -> std::result::Result<ratatui::backend::WindowSize, Self::Error> {
+        self.inner.window_size()
+    }
+    fn flush(&mut self) -> std::result::Result<(), Self::Error> {
+        self.inner.flush()
+    }
+}
+
+/// Runs the Quote Tick on `terminal` with `keys` sending its input, and quits once `script` has
+/// run and the Tick has settled.
+async fn run_quote<B: ratatui::backend::Backend>(
+    terminal: &mut Terminal<B>,
+    keys: (
+        Keys,
+        tokio::sync::mpsc::UnboundedReceiver<std::io::Result<Event>>,
+    ),
+    script: impl std::future::Future<Output = ()> + Send + 'static,
+) {
+    let (_push, market) = tokio::sync::mpsc::unbounded_channel();
+    let api = Quotes(Mutex::new(Some(market)));
+    let (sender, receiver) = keys;
+    tokio::spawn(async move {
+        script.await;
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        let quit = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        sender.send(Ok(quit)).unwrap();
+    });
+    quote::run_live(
+        &QuoteArgs {
+            symbols: vec!["AAPL.US".into(), "TSLA.US".into()],
+            output: OnceArgs::default(),
+        },
+        &api,
+        &Settings::default(),
+        terminal,
+        tokio_stream::wrappers::UnboundedReceiverStream::new(receiver),
+        &mut TickStream::in_memory(TickKind::Quote),
+    )
+    .await
+    .unwrap();
+}
+
+fn screen_text(buffer: &ratatui::buffer::Buffer) -> Vec<String> {
+    buffer
+        .content()
+        .chunks(usize::from(buffer.area.width))
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect())
+        .collect()
+}
+
+#[tokio::test(start_paused = true)]
+async fn dragging_a_card_through_many_sizes_ends_on_a_whole_screen_of_the_last_size() {
+    use ratatui::layout::Size;
+    let last = Size::new(30, 6);
+    // Widths and heights both change, down to 30x6; a few changes come at a time, so some land
+    // between a frame being composed and written.
+    let drag = [
+        (80, 24),
+        (64, 20),
+        (52, 18),
+        (40, 14),
+        (33, 9),
+        (30, 6),
+        (31, 7),
+        (45, 12),
+        (70, 22),
+        (100, 30),
+        (36, 8),
+        (30, 6),
+        (58, 16),
+        (41, 11),
+        (30, 10),
+        (90, 26),
+        (47, 13),
+        (35, 6),
+        (30, 14),
+        (60, 6),
+        (30, 7),
+        (44, 19),
+        (32, 6),
+        (30, 6),
+    ]
+    .map(|(columns, rows)| Size::new(columns, rows));
+    let keys = tokio::sync::mpsc::unbounded_channel();
+    let sizes: Sizes = std::sync::Arc::new(Mutex::new([Size::new(80, 24)].into()));
+    let mut dragged = Terminal::new(DraggedBackend {
+        inner: TestBackend::new(80, 24),
+        sizes: std::sync::Arc::clone(&sizes),
+        signals: keys.0.clone(),
+    })
+    .unwrap();
+    let signals = keys.0.clone();
+    let script = async move {
+        for batch in drag.chunks(3) {
+            tokio::time::sleep(std::time::Duration::from_millis(7)).await;
+            sizes.lock().unwrap().extend(batch);
+            signals
+                .send(Ok(Event::Resize(batch[0].width, batch[0].height)))
+                .unwrap();
+        }
+    };
+    run_quote(&mut dragged, keys, script).await;
+
+    let mut fresh = Terminal::new(TestBackend::new(last.width, last.height)).unwrap();
+    run_quote(&mut fresh, tokio::sync::mpsc::unbounded_channel(), async {}).await;
+    let backend = dragged.backend();
+    assert_eq!(backend.inner.buffer().area.as_size(), last);
+    assert_eq!(
+        screen_text(backend.inner.buffer()),
+        screen_text(fresh.backend().buffer())
+    );
+}

@@ -623,7 +623,7 @@ impl crate::runtime::LiveView for KlineView {
         Ok(json!({"marks": self.marks}))
     }
     fn help(&self) -> &'static str {
-        "q / Ctrl+C  Quit · Backspace Back\nh/l or Left/Right  Select candle\nj/k or Ctrl+N/P  Navigate visible list / event samples\ne  Edit publication event (Tab field, Enter apply, Ctrl+C cancel)\nv  Event view picker · r Event range picker\n[ / ]  Previous / next event range\nEnter  Event candle detail\na  Ask Chat about the selected research observation\ng / G  First / latest candle\nPageUp / PageDown  Move one screen\nOrdinary Kline: 1 day · 2 week · 3 month · 4 1m\n5 5m · 6 15m · 7 30m · 8 60m · m MA\nHistory refresh every 30s; API calendar determines sessions"
+        "Backspace  Back\nh/l or Left/Right  Select candle\nj/k or Ctrl+N/P  Navigate visible list / event samples\ne  Edit publication event (Tab field, Enter apply, Ctrl+C cancel)\nv  Event view picker · r Event range picker\n[ / ]  Previous / next event range\nEnter  Event candle detail\na  Ask Chat about the selected research observation\ng / G  First / latest candle\nPageUp / PageDown  Move one screen\nOrdinary Kline: 1 day · 2 week · 3 month · 4 1m\n5 5m · 6 15m · 7 30m · 8 60m · m MA\nHistory refresh every 30s; API calendar determines sessions"
     }
     fn captures_text(&self) -> bool {
         self.event_editor.is_some()

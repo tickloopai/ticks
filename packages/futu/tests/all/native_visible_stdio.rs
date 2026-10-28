@@ -109,7 +109,7 @@ fn request(child: &mut Child, id: u64, method: &str, params: Value) {
 #[test]
 fn a_hosted_options_tick_describes_reads_calls_and_updates_over_protocol_3() {
     let home = tempfile::tempdir().unwrap();
-    let (mut child, mut tty, frames) = hosted_options(home.path(), fake_opend::start());
+    let (mut child, _tty, frames) = hosted_options(home.path(), fake_opend::start());
 
     let first = frame_where(&frames, |frame| frame["method"] == "tick/update");
     assert_eq!(first["params"]["data"]["source"], "futu");
@@ -149,7 +149,7 @@ fn a_hosted_options_tick_describes_reads_calls_and_updates_over_protocol_3() {
         refreshed["params"]["seq"].as_u64().unwrap() > first["params"]["seq"].as_u64().unwrap()
     );
 
-    tty.write_all(b"q").unwrap();
+    assert_eq!(unsafe { libc::kill(child.id() as i32, libc::SIGTERM) }, 0);
     let deadline = Instant::now() + Duration::from_secs(5);
     while child.try_wait().unwrap().is_none() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));

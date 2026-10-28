@@ -2,6 +2,9 @@
 
 TICK_PACKAGES ?= $(notdir $(patsubst %/tick-package.json,%,$(wildcard packages/*/tick-package.json)))
 TICKLOOP ?= tickloop
+# The config root Tickloop's own `make dev` runs with, so the packages installed here are the ones
+# a development Tickloop opens.
+TICKLOOP_DEV_CONFIG_DIR ?= $(HOME)/.tickloop-dev
 HOST_TARGET := $(shell scripts/package-ticks.sh --host-target)
 
 .PHONY: build test check package-ticks dev-ticks release
@@ -26,12 +29,18 @@ check:
 package-ticks:
 	scripts/package-ticks.sh $(TICK_PACKAGES)
 
-## Package the Tick packages, then install each with TICKLOOP (default: tickloop on PATH).
+## Package the Tick packages, then install each with TICKLOOP (default: tickloop on PATH) into the
+## development config root TICKLOOP_DEV_CONFIG_DIR (default: ~/.tickloop-dev).
 dev-ticks:
 	@command -v "$(TICKLOOP)" >/dev/null || { echo 'dev-ticks needs tickloop on PATH, or TICKLOOP=<path to tickloop>' >&2; exit 1; }
+	@if [ -f "$(TICKLOOP_DEV_CONFIG_DIR)/plugins/installed.json" ] && ! "$(TICKLOOP)" plugin --help >/dev/null 2>&1; then \
+		echo "$(TICKLOOP_DEV_CONFIG_DIR) keeps Ticks as plugins, which $(TICKLOOP) cannot install; pass TICKLOOP=<the development build of tickloop>" >&2; \
+		exit 1; \
+	fi
 	@TICK_PACKAGE_QUIET=1 scripts/package-ticks.sh $(TICK_PACKAGES)
 	@for package in $(TICK_PACKAGES); do \
-		"$(TICKLOOP)" tick install --path "dist/ticks/$(HOST_TARGET)/$$package" || exit 1; \
+		TICKLOOP_CONFIG_DIR="$(TICKLOOP_DEV_CONFIG_DIR)" \
+			"$(TICKLOOP)" tick install --path "dist/ticks/$(HOST_TARGET)/$$package" || exit 1; \
 	done
 
 ## Release each selected Tick package: build every target on this Mac and the OrbStack Linux machines

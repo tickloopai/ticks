@@ -815,7 +815,7 @@ impl LiveView for ReaderView {
         Ok(true)
     }
     fn help(&self) -> &'static str {
-        "j/k / Ctrl+N/P / arrows  Navigate / scroll\nEnter  Open selected document / section\nd  Documents    t  Table of contents\n[ / ]  Previous / next section\n/  Search    n / N  Next / previous visible match\nc  Show stable citation    a  Ask Chat about visible paragraph\no  Open original URL/path    R  Retry context originals\nPageUp/PageDown  Page    g/G  Start/end\nBackspace  Return / clear search\nq / Ctrl+C  Quit    ?  Help\nSearch / original editor: Enter apply · Ctrl+C cancel"
+        "j/k / Ctrl+N/P / arrows  Navigate / scroll\nEnter  Open selected document / section\nd  Documents    t  Table of contents\n[ / ]  Previous / next section\n/  Search    n / N  Next / previous visible match\nc  Show stable citation    a  Ask Chat about visible paragraph\no  Open original URL/path    R  Retry context originals\nPageUp/PageDown  Page    g/G  Start/end\nBackspace  Return / clear search\n?  Help\nSearch / original editor: Enter apply · Ctrl+C cancel"
     }
     fn draw(&self, frame: &mut Frame<'_>, _: &mut ViewState, settings: &Settings) {
         let styles = settings.styles();
@@ -835,7 +835,8 @@ impl LiveView for ReaderView {
             block,
             Rect::new(area.x, area.y, area.width, area.height.saturating_sub(1)),
         );
-        if inner.width == 0 || inner.height < 4 {
+        // A line of prose and the key line are the least a Panel reads with.
+        if inner.width == 0 || inner.height < 2 {
             return;
         }
         let documents = library_documents(&self.library).unwrap_or_default();
