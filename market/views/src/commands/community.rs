@@ -503,7 +503,10 @@ impl LiveView for CommunityView {
     }
 }
 
-pub async fn run_live<B: Backend, S: Stream<Item = std::io::Result<Event>> + Unpin>(
+pub async fn run_live<
+    B: Backend + crate::viewport::KeyBubbling,
+    S: Stream<Item = std::io::Result<Event>> + Unpin,
+>(
     args: &CommunityArgs,
     api: Arc<dyn CommunityApi>,
     settings: &Settings,

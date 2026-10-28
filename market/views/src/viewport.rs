@@ -4,6 +4,37 @@ use ratatui::{
     layout::{Position, Size},
 };
 
+/// Hands Tickloop the keys a hosted Tick has no use for, so the user moves on from its card:
+/// `ESC ] 7777 ; tickloop ; key=<name> BEL` on the Tick's terminal, after what it drew.
+pub trait KeyBubbling {
+    /// Tells the host the Tick had no use for `key`; nothing when no host listens.
+    fn bubble(&mut self, key: &str) -> std::io::Result<()> {
+        let _ = key;
+        Ok(())
+    }
+}
+
+/// Announces that the Tick hands the keys it has no use for to Tickloop.
+pub const BUBBLING_ON: &str = "\x1b]7777;tickloop;bubble=on\x07";
+
+pub fn bubbled_key(key: &str) -> String {
+    format!("\x1b]7777;tickloop;key={key}\x07")
+}
+
+impl KeyBubbling for ratatui::backend::TestBackend {}
+
+impl<B> KeyBubbling for ViewportBackend<B> {
+    fn bubble(&mut self, key: &str) -> std::io::Result<()> {
+        use std::io::Write;
+        // Only a hosted Tick draws on a terminal of its own, which a host reads.
+        let Some(tty) = &mut self.tty else {
+            return Ok(());
+        };
+        tty.write_all(bubbled_key(key).as_bytes())?;
+        tty.flush()
+    }
+}
+
 pub struct ViewportBackend<B> {
     inner: B,
     maximum: Option<Size>,

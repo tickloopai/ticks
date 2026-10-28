@@ -153,7 +153,7 @@ impl Screen<'_> {
 /// A request the source turns down before content is shown with its reason and not asked again.
 /// Once content was shown, any other failure ends the Tick as it always has.
 pub async fn connect_and_run<
-    B: Backend,
+    B: Backend + tick_market::viewport::KeyBubbling,
     S: Stream<Item = std::io::Result<Event>> + Unpin,
     D: DataSource,
 >(

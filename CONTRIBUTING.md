@@ -36,6 +36,28 @@ TICKLOOP_CONFIG_DIR=$(mktemp -d) NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1
   cargo nextest run --locked -p tickloop-tick-longbridge -E 'test(rate_limit::)'
 ```
 
+## Tick screens in Monitor cards
+
+Tickloop shows a hosted Tick only as a card in its Monitor column, and the user's keys go straight to the Tick while the card has focus; the rules are in the `screen` section of `tick/protocol/SPECIFICATION.md` in tickloopai/tickloop. Every financial Tick runs through `runtime::run` in `market/views/src/runtime.rs`, which implements the shared parts below, so a view only has to lay itself out and use its keys as described here.
+
+- **Width.** A card is 40 columns unless the user narrows it, down to 30 (`MINIMUM_PANEL_COLUMNS`). Lay every view out for 30 columns: give up secondary columns and shorten names and key hints first (`draw_table` column priorities, `fit_hints`, `pack_fields`). Scrolling over the minimum layout is only the fallback for a Panel smaller than the minimum.
+- **Height.** `TickKind::minimum_panel_size().rows` is declared to the host as `screen.min_rows`: the fewest rows the Tick stays usable at, its status row included, from 6 to 14. `TickKind::maximum_rows()` is the most rows a card puts to use when the Monitor has room; declare one only for a view that shows more with more rows (a list, table, chart or document) and leave a view such as Quote at its minimum. Keep the status row on the bottom line at every height.
+
+  | Tick | Minimum rows | Maximum rows |
+  | --- | --- | --- |
+  | Quote | 6 | — |
+  | Watchlist | 6 | 24 |
+  | Positions | 8 | 20 |
+  | News, Community | 10 | 24 |
+  | Reader | 10 | 30 |
+  | Earnings | 14 | 24 |
+  | Kline (and its event chart), Options | 14 | 30 |
+
+- **Redrawing.** The runtime composes each frame in memory and writes it only when it differs from the one on screen. When the terminal's size changes (`SIGWINCH`, or a size found to differ before a frame is written) it clears the screen and draws the whole frame again; a frame composed for one size is never written to a terminal of another. A card resizes often, as other cards open and close and as the user drags the Monitor wider, so a view must lay itself out from the size it is given each frame and keep no layout from the last.
+- **Keys.** No key ends a hosted Tick: Tickloop ends it with `SIGTERM` or by closing its input, so q and Ctrl+C only quit a Tick run in a terminal of its own. Ctrl+C and Esc cancel an open editor; editors use the plain editing keys only. Outside an editor Esc goes back a level as Backspace does: it closes the help overlay, a popup or an article. Never make a function need Esc twice, since Tickloop takes a second Esc within 300 ms to leave the card.
+- **Handing keys on.** A hosted Tick announces `ESC ] 7777 ; tickloop ; bubble=on BEL` on its terminal when it starts, and writes `ESC ] 7777 ; tickloop ; key=<name> BEL` after its screen for each of `esc`, `up`, `down`, `left`, `right`, `tab` and `backtab` (Shift+Tab) it has no use for, so the user moves on to the next card, the list or the input. The runtime decides by the screen: a key that leaves it unchanged, such as down on the last row, left on the first candle, Esc with nothing to close or Tab with no field to move to, is handed on. A view therefore needs no code of its own for this, but a key it uses must change the screen, and one it ignores must change nothing. An open editor keeps every key.
+- **Tests.** `market/views/tests/all/minimum_width.rs` lays every Tick and mode out at 30 columns by its minimum rows, 40 by its minimum and 40 by its maximum, and checks its key fields and the status row; a new view or mode adds its scenarios to `every_tick_at_the_minimum_width`. `themed_runtime.rs` drags a card through two dozen sizes down to 30×6 and checks which keys are handed on, and the `native_visible_stdio` tests run hosted Ticks on a real PTY.
+
 ## Writing tests
 
 - Put tests in the crate they cover. Each crate has at most one integration test binary, `tests/all.rs`, declaring modules from `tests/all/*.rs` with `#[path]`; test names are prefixed by that module (`entry::…`, `auth::…`, `package_skill::…`).

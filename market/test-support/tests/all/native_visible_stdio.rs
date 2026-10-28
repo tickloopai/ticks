@@ -99,10 +99,11 @@ fn next(receiver: &mpsc::Receiver<Value>) -> Value {
 }
 
 /// A host shows the Tick in a card and ends it itself: q and Ctrl+C reach the card as keys, so
-/// neither ends the Tick, and Esc, which leaves the card, does nothing in it.
+/// neither ends the Tick. The Tick tells the host it hands on the keys it has no use for, and
+/// Esc with nothing to go back from is one.
 #[test]
-fn a_hosted_tick_quits_on_no_key() {
-    let (mut child, mut tty, frames, _screen) = visible_kline();
+fn a_hosted_tick_quits_on_no_key_and_bubbles_an_unused_esc() {
+    let (mut child, mut tty, frames, screen) = visible_kline();
     assert_eq!(next(&frames)["method"], "tick/update");
     std::thread::sleep(Duration::from_millis(200));
     for key in [&b"q"[..], b"\x03", b"\x1b"] {
@@ -113,6 +114,17 @@ fn a_hosted_tick_quits_on_no_key() {
             "{key:?} ended the Tick"
         );
     }
+    let output = String::from_utf8_lossy(&screen.lock().unwrap()).into_owned();
+    assert_eq!(
+        output.matches("\x1b]7777;tickloop;bubble=on\x07").count(),
+        1
+    );
+    assert_eq!(
+        output.matches("\x1b]7777;tickloop;key=").count(),
+        1,
+        "{output:?}"
+    );
+    assert!(output.contains("\x1b]7777;tickloop;key=esc\x07"));
     tty.write_all(b"5").unwrap();
     let switched = loop {
         let frame = next(&frames);

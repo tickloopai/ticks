@@ -393,7 +393,10 @@ impl LiveView for NewsView<'_> {
     }
 }
 
-pub async fn run_live<B: Backend, S: Stream<Item = std::io::Result<Event>> + Unpin>(
+pub async fn run_live<
+    B: Backend + crate::viewport::KeyBubbling,
+    S: Stream<Item = std::io::Result<Event>> + Unpin,
+>(
     args: &NewsArgs,
     quote_api: &QuoteServices,
     news_api: &dyn NewsApi,

@@ -217,6 +217,8 @@ struct CountingBackend {
     inner: TestBackend,
     frames: usize,
     clears: usize,
+    /// The keys the Tick handed its host.
+    bubbled: Vec<String>,
 }
 
 impl CountingBackend {
@@ -225,7 +227,15 @@ impl CountingBackend {
             inner: TestBackend::new(columns, rows),
             frames: 0,
             clears: 0,
+            bubbled: Vec::new(),
         }
+    }
+}
+
+impl tick_market::viewport::KeyBubbling for CountingBackend {
+    fn bubble(&mut self, key: &str) -> std::io::Result<()> {
+        self.bubbled.push(key.to_owned());
+        Ok(())
     }
 }
 
@@ -333,6 +343,8 @@ struct DraggedBackend {
     signals: Keys,
 }
 
+impl tick_market::viewport::KeyBubbling for DraggedBackend {}
+
 impl ratatui::backend::Backend for DraggedBackend {
     type Error = <TestBackend as ratatui::backend::Backend>::Error;
 
@@ -396,7 +408,7 @@ impl ratatui::backend::Backend for DraggedBackend {
 
 /// Runs the Quote Tick on `terminal` with `keys` sending its input, and quits once `script` has
 /// run and the Tick has settled.
-async fn run_quote<B: ratatui::backend::Backend>(
+async fn run_quote<B: ratatui::backend::Backend + tick_market::viewport::KeyBubbling>(
     terminal: &mut Terminal<B>,
     keys: (
         Keys,
@@ -496,5 +508,40 @@ async fn dragging_a_card_through_many_sizes_ends_on_a_whole_screen_of_the_last_s
     assert_eq!(
         screen_text(backend.inner.buffer()),
         screen_text(fresh.backend().buffer())
+    );
+}
+
+/// Keys that move between cards reach the host only when the Tick has no use for them: at the
+/// edge of its cards, with nothing to close, and with no fields to tab between.
+#[tokio::test(start_paused = true)]
+async fn the_keys_a_tick_has_no_use_for_bubble_to_its_host() {
+    let press = |code| Ok(Event::Key(KeyEvent::new(code, KeyModifiers::NONE)));
+    let keys = tokio::sync::mpsc::unbounded_channel();
+    let signals = keys.0.clone();
+    let script = async move {
+        for code in [
+            KeyCode::Up,
+            KeyCode::Down,
+            KeyCode::Down,
+            KeyCode::Left,
+            KeyCode::Left,
+            KeyCode::Right,
+            KeyCode::Esc,
+            KeyCode::Tab,
+            KeyCode::BackTab,
+            KeyCode::Char('?'),
+            KeyCode::Esc,
+        ] {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            signals.send(press(code)).unwrap();
+        }
+    };
+    let mut terminal = Terminal::new(CountingBackend::new(40, 12)).unwrap();
+    run_quote(&mut terminal, keys, script).await;
+    assert_eq!(
+        terminal.backend().bubbled,
+        ["up", "down", "left", "esc", "tab", "backtab"],
+        "the first card has nothing above or before it, the last nothing below; Esc closes the \
+         help it opened"
     );
 }

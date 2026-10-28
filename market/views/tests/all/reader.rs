@@ -152,7 +152,6 @@ async fn reader_backspace_and_control_navigation_do_not_quit_or_publish_cursor_u
         KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
         KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
         KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
-        KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     ])
     .await;
     assert!(

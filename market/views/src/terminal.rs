@@ -64,7 +64,12 @@ impl VisibleTerminalSession {
             tty,
             original_termios,
         };
-        if let Err(error) = execute!(session.terminal.backend_mut(), EnterAlternateScreen, Hide) {
+        if let Err(error) = execute!(
+            session.terminal.backend_mut(),
+            EnterAlternateScreen,
+            Hide,
+            crossterm::style::Print(crate::viewport::BUBBLING_ON)
+        ) {
             let _ = unsafe { libc::tcsetattr(fd, libc::TCSANOW, &original_termios) };
             return Err(error.into());
         }
@@ -202,17 +207,12 @@ pub fn visible_input_events()
             if sender.is_closed() {
                 return;
             }
-            let mut poll = libc::pollfd {
-                fd: tty.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            };
             let poll_timeout = if escape.is_empty() {
                 INPUT_POLL_TIMEOUT_MS
             } else {
                 ESCAPE_SEQUENCE_TIMEOUT.as_millis() as i32
             };
-            let ready = unsafe { libc::poll(&mut poll, 1, poll_timeout) };
+            let ready = wait_readable(tty.as_raw_fd(), poll_timeout);
             if ready < 0 {
                 let error = std::io::Error::last_os_error();
                 if error.kind() == std::io::ErrorKind::Interrupted {
@@ -376,6 +376,30 @@ pub fn visible_input_events()
     #[cfg(not(unix))]
     {
         Ok(Box::pin(keyboard))
+    }
+}
+
+/// Waits up to `timeout_ms` for `fd` to have input, as `poll(2)` does: positive when it has,
+/// zero on timeout, negative on error. macOS answers `poll` on `/dev/tty` with POLLNVAL at once,
+/// which would leave a lone Esc waiting for the next key, so this uses `select(2)`.
+fn wait_readable(fd: std::os::fd::RawFd, timeout_ms: i32) -> i32 {
+    let mut readable: libc::fd_set = unsafe { std::mem::zeroed() };
+    unsafe {
+        libc::FD_ZERO(&mut readable);
+        libc::FD_SET(fd, &mut readable);
+    }
+    let mut timeout = libc::timeval {
+        tv_sec: libc::time_t::from(timeout_ms / 1000),
+        tv_usec: ((timeout_ms % 1000) * 1000) as libc::suseconds_t,
+    };
+    unsafe {
+        libc::select(
+            fd + 1,
+            &mut readable,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut timeout,
+        )
     }
 }
 

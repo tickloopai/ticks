@@ -26,6 +26,14 @@ const MONITOR_CARD_COLUMNS: u16 = 40;
 /// editor's keys.
 const STATUS_KEYS: [&str; 2] = ["q Quit", "Ctrl+C Cancel"];
 const HELP_SCROLL_HINT: &str = "j/k more";
+/// Fields a card of the Tick's minimum rows leaves for a taller one: the event chart's window
+/// and time-zone lines rank below its release, baseline and candle, and the Reader shows its
+/// document's start, with later prose a scroll away.
+const BELOW_THE_FOLD: [&str; 3] = [
+    "Auto event window ·",
+    "Times in America/New_York",
+    "Revenue was $12.8",
+];
 /// Narrower than any Tick's minimum, so the Panel scrolls over the minimum layout.
 const BELOW_MINIMUM: [u16; 2] = [24, 20];
 /// The width the Ticks were laid out for before 80 columns became the target.
@@ -59,6 +67,11 @@ impl Scenario {
         } else {
             self.kind.minimum_panel_size()
         }
+    }
+
+    /// The rows a host grows the Tick's card to when it has room.
+    fn maximum_rows(&self) -> Option<u16> {
+        self.kind.maximum_rows()
     }
 
     fn label(&self, columns: u16, rows: u16) -> String {
@@ -478,7 +491,7 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
         scenario(
             TickKind::Earnings,
             &[KeyCode::Char('?')],
-            &["Keys · ? close", "Enter  Period detail /"],
+            &["Keys · ?", "Enter  Period detail /"],
         ),
         scenario(
             TickKind::Options,
@@ -765,25 +778,36 @@ async fn every_tick_holds_its_layout_at_its_full_minimum_size() {
     }
 }
 
-/// A Monitor card is 40 columns unless the user narrows it to 30, and at least the Tick's
-/// minimum rows tall; taller when it has room. The layout holds without scrolling the canvas and
+/// A Monitor card is 40 columns unless the user narrows it to 30, at least the Tick's minimum
+/// rows tall, and up to its maximum when the Monitor has room. The layout holds without scrolling the canvas and
 /// keeps the status row on the bottom line; what a short card leaves below the fold, such as
 /// an article's body or the positions' totals, the Tick's own keys scroll to.
 #[tokio::test(start_paused = true)]
 async fn every_tick_fits_the_monitor_card_sizes_with_its_status_row_at_the_bottom() {
     let mut failures = Vec::new();
     for scenario in every_tick_at_the_minimum_width() {
-        let rows = scenario.minimum().rows;
-        for (columns, rows) in [
-            (MONITOR_COLUMNS, rows),
-            (MONITOR_CARD_COLUMNS, rows),
-            (MONITOR_CARD_COLUMNS, rows + 6),
-        ] {
+        let minimum = scenario.minimum().rows;
+        let mut sizes = vec![(MONITOR_COLUMNS, minimum), (MONITOR_CARD_COLUMNS, minimum)];
+        sizes.extend(
+            scenario
+                .maximum_rows()
+                .map(|maximum| (MONITOR_CARD_COLUMNS, maximum)),
+        );
+        for (columns, rows) in sizes {
             let cells = render(&scenario, columns, rows).await;
             let frame = text(&cells);
             let label = scenario.label(columns, rows);
             if frame.contains(SCROLL_HINT) {
                 failures.push(format!("{label} scrolls:\n{frame}"));
+            }
+            // The fields are those of the narrowest layout, which a wider card spells out more
+            // fully; a help overlay too short for every key scrolls them.
+            if columns == MONITOR_COLUMNS && !frame.contains(HELP_SCROLL_HINT) {
+                for field in scenario.shows {
+                    if !frame.contains(field) && !BELOW_THE_FOLD.contains(field) {
+                        failures.push(format!("{label} hides {field:?}:\n{frame}"));
+                    }
+                }
             }
             let status = row(&cells, usize::from(rows) - 1);
             if !STATUS_KEYS.iter().any(|keys| status.contains(keys)) {

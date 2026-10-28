@@ -1282,7 +1282,7 @@ impl crate::runtime::LiveView for KlineView {
 }
 
 pub async fn run_live<
-    B: ratatui::backend::Backend,
+    B: ratatui::backend::Backend + crate::viewport::KeyBubbling,
     S: futures_util::Stream<Item = std::io::Result<crossterm::event::Event>> + Unpin,
 >(
     args: &KlineArgs,

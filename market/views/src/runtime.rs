@@ -1,4 +1,6 @@
-use crate::{canvas::CanvasBackend, config::Settings, output::TableData, tools::Tools};
+use crate::{
+    canvas::CanvasBackend, config::Settings, output::TableData, tools::Tools, viewport::KeyBubbling,
+};
 use async_trait::async_trait;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use futures_util::{Stream, StreamExt, stream::FuturesUnordered};
@@ -27,7 +29,7 @@ use tickloop_ui::{
 const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
 const WIDE_PANEL_COLUMNS: u16 = 64;
 const TALL_PANEL_ROWS: u16 = 10;
-const HELP_TITLE: &str = " Keys · ? / Backspace close ";
+const HELP_TITLE: &str = " Keys · ? / Esc close ";
 const NARROW_HELP_TITLE: &str = " Keys · ? close ";
 /// Under a help overlay too short for every key.
 const HELP_SCROLL_HINT: &str = " j/k more ";
@@ -319,7 +321,11 @@ async fn refresh_cancellable<V: LiveView, S: Stream<Item = std::io::Result<Event
     .await
 }
 
-pub async fn run<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event>> + Unpin>(
+pub async fn run<
+    V: LiveView,
+    B: Backend + KeyBubbling,
+    S: Stream<Item = std::io::Result<Event>> + Unpin,
+>(
     view: &mut V,
     api: &QuoteServices,
     settings: &Settings,
@@ -452,63 +458,17 @@ pub async fn run<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event
                         Some(Err(error)) => return Err(error.into()),
                         Some(Ok(Event::Resize(_, _))) => { terminal.clear().map_err(|error| Error::usage(error.to_string()))?; shown = None; }
                         Some(Ok(Event::Key(key))) if key.kind != KeyEventKind::Release => {
-                            let capturing = view.captures_text();
-                            let interrupted = key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL);
-                            if interrupted && capturing { view.cancel_text(); continue; }
-                            if !capturing && is_exit(&Event::Key(key)) { break; }
-                            if !capturing && key.code == KeyCode::Char('?') { state.help = !state.help; state.help_offset = 0; continue; }
-                            if state.help {
-                                let control = key.modifiers.contains(KeyModifiers::CONTROL);
-                                let page = terminal.size().map_err(|error| Error::usage(error.to_string()))?.height.saturating_sub(3).max(1);
-                                // The renderer clamps the offset to the keys the overlay holds.
-                                match (key.code, control) {
-                                    (KeyCode::Backspace, false) => state.help = false,
-                                    (KeyCode::Char('j') | KeyCode::Down, false) | (KeyCode::Char('n'), true) => state.help_offset = state.help_offset.saturating_add(1),
-                                    (KeyCode::Char('k') | KeyCode::Up, false) | (KeyCode::Char('p'), true) => state.help_offset = state.help_offset.saturating_sub(1),
-                                    (KeyCode::PageDown, false) => state.help_offset = state.help_offset.saturating_add(page),
-                                    (KeyCode::PageUp, false) => state.help_offset = state.help_offset.saturating_sub(page),
-                                    (KeyCode::Char('g') | KeyCode::Home, false) => state.help_offset = 0,
-                                    (KeyCode::Char('G') | KeyCode::End, false) => state.help_offset = u16::MAX,
-                                    _ => (),
-                                }
-                                continue;
+                            let bubble = bubbled_key_name(&key, view.captures_text());
+                            let size = terminal.size().map_err(|error| Error::usage(error.to_string()))?;
+                            let before = bubble.map(|_| compose(view, size, &mut state, &mut viewport, settings));
+                            if handle_key(key, view, api, terminal, &mut state, &mut viewport, &mut input, updates).await? == KeyOutcome::Quit {
+                                break;
                             }
-                            if !capturing && let KeyCode::Char(character) = key.code && viewport.handle_key(character) { continue; }
-                            let code = if key.modifiers.contains(KeyModifiers::CONTROL) {
-                                match key.code {
-                                    KeyCode::Char('n') => KeyCode::Down,
-                                    KeyCode::Char('p') => KeyCode::Up,
-                                    _ => continue,
-                                }
-                            } else if key.modifiers.intersects(KeyModifiers::ALT | KeyModifiers::SUPER) {
-                                continue;
-                            } else { key.code };
-                            let previous_content = view.content();
-                            // Enter submits the edit, so what it waits for is no longer editing and q / Ctrl+C quit again.
-                            let editing = capturing && code != KeyCode::Enter;
-                            let handled = match cancellable_unless_editing(view.on_key(code, api, &mut state), &mut input, editing).await {
-                                Ok(Some(handled)) => handled,
-                                Ok(None) => break,
-                                Err(error) => { state.failed(error)?; continue; }
-                            };
-                            if handled {
-                                let content = view.content();
-                                if content != previous_content {
-                                    state.received_data();
-                                    updates.publish(content)?;
-                                }
-                                continue;
-                            }
-                            let length = view.table().rows.len();
-                            let page = terminal.size().map_err(|error| Error::usage(error.to_string()))?.height.saturating_sub(4).max(1) as usize;
-                            match code {
-                                KeyCode::Char('j') | KeyCode::Down => state.selected = (state.selected + 1).min(length.saturating_sub(1)),
-                                KeyCode::Char('k') | KeyCode::Up => state.selected = state.selected.saturating_sub(1),
-                                KeyCode::PageDown => state.selected = (state.selected + page).min(length.saturating_sub(1)),
-                                KeyCode::PageUp => state.selected = state.selected.saturating_sub(page),
-                                KeyCode::Char('g') | KeyCode::Home => state.selected = 0,
-                                KeyCode::Char('G') | KeyCode::End => state.selected = length.saturating_sub(1),
-                                _ => (),
+                            // A key that changed nothing on screen is one the Tick has no use for here.
+                            if let (Some(name), Some(before)) = (bubble, before)
+                                && compose(view, size, &mut state, &mut viewport, settings) == before
+                            {
+                                terminal.backend_mut().bubble(name).map_err(|error| Error::usage(error.to_string()))?;
                             }
                         }
                         _ => (),
@@ -579,6 +539,191 @@ fn render_once<V: LiveView, B: Backend>(
     {
         *shown = None;
     }
+    let composed = compose(view, size, state, viewport, settings);
+    if shown.as_ref() == Some(&composed) {
+        return Ok(true);
+    }
+    let mut whole = true;
+    terminal
+        .draw(|frame| {
+            let area = frame.area();
+            if area == composed.0.area {
+                frame.buffer_mut().clone_from(&composed.0);
+                if let Some(cursor) = composed.1 {
+                    frame.set_cursor_position(cursor);
+                }
+                return;
+            }
+            // The terminal resized after the screen was composed: show what still fits until the
+            // frame is composed again for the new size.
+            whole = false;
+            let overlap = area.intersection(composed.0.area);
+            for position in overlap.positions() {
+                frame.buffer_mut()[position] = composed.0[position].clone();
+            }
+        })
+        .map_err(|error| Error::usage(error.to_string()))?;
+    *shown = whole.then_some(composed);
+    Ok(whole)
+}
+
+/// What a key did to the Tick.
+#[derive(Debug, PartialEq, Eq)]
+enum KeyOutcome {
+    Handled,
+    Quit,
+}
+
+/// The name a host knows `key` by when the Tick hands it on: the keys that move between cards.
+/// An open editor keeps every key.
+fn bubbled_key_name(key: &crossterm::event::KeyEvent, capturing: bool) -> Option<&'static str> {
+    if capturing
+        || key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER)
+    {
+        return None;
+    }
+    Some(match key.code {
+        KeyCode::Esc => "esc",
+        KeyCode::Up => "up",
+        KeyCode::Down => "down",
+        KeyCode::Left => "left",
+        KeyCode::Right => "right",
+        KeyCode::Tab => "tab",
+        KeyCode::BackTab => "backtab",
+        _ => return None,
+    })
+}
+
+/// Hands `key` to the help overlay, an open editor, the view or the shared list selection.
+#[allow(clippy::too_many_arguments)]
+async fn handle_key<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Event>> + Unpin>(
+    key: crossterm::event::KeyEvent,
+    view: &mut V,
+    api: &QuoteServices,
+    terminal: &Terminal<B>,
+    state: &mut ViewState,
+    viewport: &mut ScrollViewport,
+    input: &mut S,
+    updates: &mut TickStream,
+) -> Result<KeyOutcome> {
+    let capturing = view.captures_text();
+    let interrupted =
+        key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL);
+    if (interrupted || key.code == KeyCode::Esc) && capturing {
+        view.cancel_text();
+        return Ok(KeyOutcome::Handled);
+    }
+    if !capturing && is_exit(&Event::Key(key)) {
+        return Ok(KeyOutcome::Quit);
+    }
+    if !capturing && key.code == KeyCode::Char('?') {
+        state.help = !state.help;
+        state.help_offset = 0;
+        return Ok(KeyOutcome::Handled);
+    }
+    if state.help {
+        let control = key.modifiers.contains(KeyModifiers::CONTROL);
+        let page = terminal
+            .size()
+            .map_err(|error| Error::usage(error.to_string()))?
+            .height
+            .saturating_sub(3)
+            .max(1);
+        // The renderer clamps the offset to the keys the overlay holds.
+        match (key.code, control) {
+            (KeyCode::Backspace | KeyCode::Esc, false) => state.help = false,
+            (KeyCode::Char('j') | KeyCode::Down, false) | (KeyCode::Char('n'), true) => {
+                state.help_offset = state.help_offset.saturating_add(1)
+            }
+            (KeyCode::Char('k') | KeyCode::Up, false) | (KeyCode::Char('p'), true) => {
+                state.help_offset = state.help_offset.saturating_sub(1)
+            }
+            (KeyCode::PageDown, false) => {
+                state.help_offset = state.help_offset.saturating_add(page)
+            }
+            (KeyCode::PageUp, false) => state.help_offset = state.help_offset.saturating_sub(page),
+            (KeyCode::Char('g') | KeyCode::Home, false) => state.help_offset = 0,
+            (KeyCode::Char('G') | KeyCode::End, false) => state.help_offset = u16::MAX,
+            _ => (),
+        }
+        return Ok(KeyOutcome::Handled);
+    }
+    if !capturing
+        && let KeyCode::Char(character) = key.code
+        && viewport.handle_key(character)
+    {
+        return Ok(KeyOutcome::Handled);
+    }
+    let code = if key.modifiers.contains(KeyModifiers::CONTROL) {
+        match key.code {
+            KeyCode::Char('n') => KeyCode::Down,
+            KeyCode::Char('p') => KeyCode::Up,
+            _ => return Ok(KeyOutcome::Handled),
+        }
+    } else if key
+        .modifiers
+        .intersects(KeyModifiers::ALT | KeyModifiers::SUPER)
+    {
+        return Ok(KeyOutcome::Handled);
+    } else if key.code == KeyCode::Esc {
+        // Esc goes back a level as Backspace does; a host takes a second Esc soon after to leave
+        // the card, so nothing waits for one.
+        KeyCode::Backspace
+    } else {
+        key.code
+    };
+    let previous_content = view.content();
+    // Enter submits the edit, so what it waits for is no longer editing and q / Ctrl+C quit again.
+    let editing = capturing && code != KeyCode::Enter;
+    let handled =
+        match cancellable_unless_editing(view.on_key(code, api, state), input, editing).await {
+            Ok(Some(handled)) => handled,
+            Ok(None) => return Ok(KeyOutcome::Quit),
+            Err(error) => {
+                state.failed(error)?;
+                return Ok(KeyOutcome::Handled);
+            }
+        };
+    if handled {
+        let content = view.content();
+        if content != previous_content {
+            state.received_data();
+            updates.publish(content)?;
+        }
+        return Ok(KeyOutcome::Handled);
+    }
+    let length = view.table().rows.len();
+    let page = terminal
+        .size()
+        .map_err(|error| Error::usage(error.to_string()))?
+        .height
+        .saturating_sub(4)
+        .max(1) as usize;
+    match code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            state.selected = (state.selected + 1).min(length.saturating_sub(1))
+        }
+        KeyCode::Char('k') | KeyCode::Up => state.selected = state.selected.saturating_sub(1),
+        KeyCode::PageDown => state.selected = (state.selected + page).min(length.saturating_sub(1)),
+        KeyCode::PageUp => state.selected = state.selected.saturating_sub(page),
+        KeyCode::Char('g') | KeyCode::Home => state.selected = 0,
+        KeyCode::Char('G') | KeyCode::End => state.selected = length.saturating_sub(1),
+        _ => (),
+    }
+    Ok(KeyOutcome::Handled)
+}
+
+/// The whole screen of `size` the view shows now, with its cursor: the view and its status row,
+/// scrolled over the canvas of the Tick's minimum when the screen is smaller, and the help overlay.
+fn compose<V: LiveView>(
+    view: &V,
+    size: Size,
+    state: &mut ViewState,
+    viewport: &mut ScrollViewport,
+    settings: &Settings,
+) -> (Buffer, Option<Position>) {
     let minimum = view.minimum_panel_size();
     viewport.set_layout(ViewportLayout::of(
         Rect::new(0, 0, size.width, size.height),
@@ -664,32 +809,7 @@ fn render_once<V: LiveView, B: Backend>(
             frame.render_widget(help, popup);
         }
     });
-    let composed = (screen.backend().buffer().clone(), screen.backend().cursor());
-    if shown.as_ref() == Some(&composed) {
-        return Ok(true);
-    }
-    let mut whole = true;
-    terminal
-        .draw(|frame| {
-            let area = frame.area();
-            if area == composed.0.area {
-                frame.buffer_mut().clone_from(&composed.0);
-                if let Some(cursor) = composed.1 {
-                    frame.set_cursor_position(cursor);
-                }
-                return;
-            }
-            // The terminal resized after the screen was composed: show what still fits until the
-            // frame is composed again for the new size.
-            whole = false;
-            let overlap = area.intersection(composed.0.area);
-            for position in overlap.positions() {
-                frame.buffer_mut()[position] = composed.0[position].clone();
-            }
-        })
-        .map_err(|error| Error::usage(error.to_string()))?;
-    *shown = whole.then_some(composed);
-    Ok(whole)
+    (screen.backend().buffer().clone(), screen.backend().cursor())
 }
 
 /// Draws the view and the status row into the frame, which is the Panel itself or, for a Panel

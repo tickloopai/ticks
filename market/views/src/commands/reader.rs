@@ -1186,7 +1186,10 @@ pub async fn run_once(
     }
 }
 
-pub async fn run_live<B: Backend, S: Stream<Item = std::io::Result<Event>> + Unpin>(
+pub async fn run_live<
+    B: Backend + crate::viewport::KeyBubbling,
+    S: Stream<Item = std::io::Result<Event>> + Unpin,
+>(
     library: Library,
     settings: &Settings,
     terminal: &mut Terminal<B>,

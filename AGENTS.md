@@ -53,6 +53,7 @@ Dependency boundaries:
 | Code adapted from third parties | [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) |
 | `tick-package.json` or authentication declarations | "Package manifest" in CONTRIBUTING.md |
 | Releases, targets, `marketplace.json` | "Releasing" in CONTRIBUTING.md |
+| A Tick's layout, sizes, keys or redrawing | "Tick screens in Monitor cards" in CONTRIBUTING.md |
 | The Tick protocol or SDK | `tick/protocol/SPECIFICATION.md` in tickloopai/tickloop |
 
 ## Verification

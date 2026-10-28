@@ -1,7 +1,7 @@
 #![cfg(unix)]
 //! A market Tick run in a real terminal is a standalone program, also inside a Herdr Pane, and
-//! the keys it answers there. Esc and Ctrl+B belong to the view around the Tick, Backspace returns
-//! one level outside an editor, and an editor keeps q as text while Ctrl+C cancels it.
+//! the keys it answers there. Ctrl+B belongs to the view around the Tick, Esc and Backspace return
+//! one level outside an editor, and an editor keeps q as text while Ctrl+C or Esc cancels it.
 
 use std::{
     fs::File,
@@ -182,22 +182,29 @@ fn view_keys_and_backspace_leave_the_tick_running_and_q_quits() {
     kline.keeps_running_after("Ctrl+B");
     kline.press(b"\x7f");
     kline.keeps_running_after("Backspace outside an editor");
+    assert!(
+        !kline.output().contains("\x1b]7777;"),
+        "only a hosted Tick hands keys on"
+    );
     kline.press(b"q");
     kline.exits_after("q");
 }
 
 #[test]
-fn an_editor_keeps_q_as_text_and_ctrl_c_cancels_it_without_quitting() {
+fn an_editor_keeps_q_as_text_and_ctrl_c_or_esc_cancels_it_without_quitting() {
     let mut kline = StandaloneKline::start();
     kline.open_event_editor();
     kline.press(b"q");
     kline.keeps_running_after("q in the editor");
-    kline.press(b"\x7f\x1b");
-    kline.keeps_running_after("Backspace and Esc in the editor");
+    kline.press(b"\x7f");
+    kline.keeps_running_after("Backspace in the editor");
     kline.press(b"\x03");
     kline.keeps_running_after("Ctrl+C in the editor");
+    kline.open_event_editor();
+    kline.press(b"\x1b");
+    kline.keeps_running_after("Esc in the editor");
     kline.press(b"q");
-    kline.exits_after("q once Ctrl+C closed the editor");
+    kline.exits_after("q once Esc closed the editor");
 }
 
 #[test]

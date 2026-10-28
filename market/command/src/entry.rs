@@ -189,7 +189,7 @@ pub async fn run_tick(
 }
 
 pub(crate) async fn run_live<
-    B: ratatui::backend::Backend,
+    B: ratatui::backend::Backend + tick_market::viewport::KeyBubbling,
     S: Stream<Item = std::io::Result<crossterm::event::Event>> + Unpin,
 >(
     running: Running<'_>,

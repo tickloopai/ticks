@@ -53,6 +53,8 @@ pub struct TickDescriptor {
     pub runtime: TickRuntimeClass,
     pub configuration: TickConfigurationRequirement,
     pub minimum_panel_size: Option<MinimumPanelSize>,
+    /// The most rows the Tick puts to use; see [`TickKind::maximum_rows`].
+    pub maximum_rows: Option<u16>,
     /// Version of the Tick Instance stream protocol this Tick speaks.
     pub protocol: u32,
     /// The query tool that rebuilds what the latest-only update stream dropped.
@@ -136,23 +138,36 @@ impl TickKind {
             Self::Watchlist => 6,
             // The price summary wrapped over four lines and the period, averages and live keys.
             Self::Kline => 14,
-            // Symbol, P/L and P/L % for the selected holding and those beside it; the price,
+            // Symbol, P/L and P/L % for a few holdings and the totals below them; the price,
             // quantity and value give way first.
-            Self::Positions => 6,
-            // A headline beside the time; the source gives way first.
-            Self::News => 6,
+            Self::Positions => 8,
+            // A few headlines beside their times, or an article's title and the start of its
+            // body; the source gives way first.
+            Self::News => 10,
             // The mode's caveat, and each table's leading two columns.
             Self::Earnings => 14,
             // Spot, ATM move, and strike with both midpoints.
             Self::Options => 14,
-            // Prose below the frame's title; a short Panel leaves out the document heading.
-            Self::Reader => 6,
-            // A post headline beside the date; the post kind gives way first.
-            Self::Community => 6,
+            // Prose below the document heading.
+            Self::Reader => 10,
+            // A few post headlines beside their dates, or a post's start; the post kind gives
+            // way first.
+            Self::Community => 10,
         };
         MinimumPanelSize {
             columns: MINIMUM_PANEL_COLUMNS,
             rows,
+        }
+    }
+
+    /// The most rows the Tick still puts to use when a host has room to spare: a longer list,
+    /// table, chart or document. `None` for a Tick that shows all it has at its minimum.
+    pub fn maximum_rows(self) -> Option<u16> {
+        match self {
+            Self::Quote => None,
+            Self::Positions => Some(20),
+            Self::Watchlist | Self::News | Self::Community | Self::Earnings => Some(24),
+            Self::Kline | Self::Options | Self::Reader => Some(30),
         }
     }
 
@@ -212,6 +227,7 @@ impl TickKind {
             runtime: TickRuntimeClass::Command,
             configuration,
             minimum_panel_size: Some(self.minimum_panel_size()),
+            maximum_rows: self.maximum_rows(),
             protocol: tick_protocol::NATIVE_PROTOCOL_VERSION,
             recover_with: catalog.recover_with,
             tools: catalog.tools,
@@ -238,6 +254,8 @@ impl Describe for TickKind {
             state: (!descriptor.series.is_empty()).then_some(StateDeclaration {
                 series: descriptor.series,
             }),
+            // TODO: declare `max_rows` from `descriptor.maximum_rows` once tick_protocol's
+            // ScreenDeclaration has it; hosts that know it read it from there.
             screen: Some(ScreenDeclaration {
                 min_rows: descriptor.minimum_panel_size.map(|minimum| minimum.rows),
             }),
@@ -330,8 +348,18 @@ mod tests {
         }
         assert_eq!(
             TickKind::ALL.map(declared),
-            [6, 6, 14, 6, 6, 14, 14, 6, 6].map(Some)
+            [6, 6, 14, 8, 10, 14, 14, 10, 10].map(Some)
         );
+    }
+
+    /// A host grows a card from its Tick's minimum rows up to its maximum.
+    #[test]
+    fn every_maximum_is_at_least_the_ticks_minimum() {
+        for kind in TickKind::ALL {
+            if let Some(maximum) = kind.maximum_rows() {
+                assert!(kind.minimum_panel_size().rows <= maximum, "{kind:?}");
+            }
+        }
     }
 
     #[test]

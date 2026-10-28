@@ -452,6 +452,8 @@ async fn forward_adjusted_history_accepts_only_complete_adjusted_updates() {
 
 #[derive(Clone)]
 struct ResizableBackend(std::sync::Arc<std::sync::Mutex<ratatui::backend::TestBackend>>);
+impl tick_market::viewport::KeyBubbling for ResizableBackend {}
+
 impl ratatui::backend::Backend for ResizableBackend {
     type Error = std::convert::Infallible;
     fn draw<'a, I>(&mut self, content: I) -> std::result::Result<(), Self::Error>

@@ -88,7 +88,7 @@ fn describe_lists_only_the_reader() {
     assert_eq!(reader["recover_with"], "documents");
     assert_eq!(
         reader["minimum_panel_size"],
-        serde_json::json!({"columns":30,"rows":6})
+        serde_json::json!({"columns":30,"rows":10})
     );
     let tools: Vec<_> = reader["tools"]
         .as_array()
