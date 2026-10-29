@@ -415,9 +415,11 @@ fn wait_readable(fd: std::os::fd::RawFd, timeout_ms: i32) -> i32 {
         libc::FD_ZERO(&mut readable);
         libc::FD_SET(fd, &mut readable);
     }
+    // The field types are left to inference: libc deprecates naming `time_t` and `suseconds_t`
+    // on musl, whose widths are changing.
     let mut timeout = libc::timeval {
-        tv_sec: libc::time_t::from(timeout_ms / 1000),
-        tv_usec: ((timeout_ms % 1000) * 1000) as libc::suseconds_t,
+        tv_sec: (timeout_ms / 1000) as _,
+        tv_usec: ((timeout_ms % 1000) * 1000) as _,
     };
     unsafe {
         libc::select(
