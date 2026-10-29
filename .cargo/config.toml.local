@@ -1,0 +1,23 @@
+# Build against a sibling Tickloop checkout instead of the commit locked in Cargo.lock, for
+# changes that span both repositories:
+#
+#   git clone https://github.com/tickloopai/tickloop ../tickloop
+#   cp .cargo/config.toml.example .cargo/config.toml
+#
+# To build against a Tickloop worktree instead, replace ../tickloop below with its path.
+#
+# .cargo/config.toml is ignored by Git. Cargo.lock entries resolved through these paths are
+# not valid for CI: delete .cargo/config.toml and run `cargo update -p tickloop-tick-sdk`
+# before committing Cargo.lock. Release builds run in a fresh checkout and never read it.
+
+[patch."https://github.com/tickloopai/tickloop"]
+tickloop-tick-oauth = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/tick/oauth" }
+tickloop-tick-oauth-test-server = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/tick/oauth-test-server" }
+tickloop-tick-packages = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/tick/packages" }
+tickloop-tick-protocol = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/tick/protocol" }
+tickloop-tick-sdk = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/tick/sdk" }
+tickloop-ui = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/ui" }
+
+# Overrides the crossterm patch in Cargo.toml.
+[patch.crates-io]
+crossterm = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/vendor/crossterm" }
