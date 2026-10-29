@@ -1,6 +1,6 @@
 {
   "name": "tickloop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Official Tickloop Ticks: the Reader for original financial documents from URLs or local files",
   "executable": "bin/tick-tickloop",
   "protocol": true,
