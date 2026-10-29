@@ -49,6 +49,12 @@ struct Scenario {
     shows: &'static [&'static str],
 }
 
+/// The Options title for the mock's nearest expiry, which it dates from today.
+fn nearest_mock_expiry_title() -> &'static str {
+    let expiry = time::OffsetDateTime::now_utc().date() + time::Duration::days(1);
+    format!("AAPL.US · {}", tick_provider::dates::iso_date(expiry)).leak()
+}
+
 fn scenario(kind: TickKind, keys: &[KeyCode], shows: &'static [&'static str]) -> Scenario {
     Scenario {
         kind,
@@ -464,8 +470,8 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
         scenario(
             TickKind::Options,
             &[],
-            &[
-                "AAPL.US · 2026-10-29",
+            Vec::leak(vec![
+                nearest_mock_expiry_title(),
                 "Spot 100.00 · ATM ±6.00%",
                 "Observed",
                 "Strike",
@@ -476,7 +482,7 @@ fn every_tick_at_the_minimum_width() -> Vec<Scenario> {
                 "2.90",
                 "[ ] expiry",
                 "No last-price substitution;",
-            ],
+            ]),
         ),
         scenario(
             TickKind::Reader,

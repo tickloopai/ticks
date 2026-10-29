@@ -23,6 +23,7 @@ pub const HEADERS: &[&str] = &[
     "Turnover",
     "Updated At",
     "Error",
+    "Session",
 ];
 
 pub fn table(quotes: &[Quote]) -> TableData {
@@ -33,8 +34,8 @@ pub fn table(quotes: &[Quote]) -> TableData {
             .map(|quote| {
                 let mut row = vec![json!(quote.symbol), json!(quote.name)];
                 if let Some(error) = &quote.error {
-                    row.extend(vec![Value::Null; HEADERS.len() - 3]);
-                    row.push(json!(error));
+                    row.extend(vec![Value::Null; HEADERS.len() - 4]);
+                    row.extend([json!(error), Value::Null]);
                     return row;
                 }
                 let change = quote.latest_price - quote.previous_close;
@@ -71,6 +72,7 @@ pub fn table(quotes: &[Quote]) -> TableData {
                     json!(quote.turnover),
                     json!(quote.updated_at),
                     Value::Null,
+                    json!(quote.session),
                 ]);
                 row
             })
@@ -149,7 +151,7 @@ impl crate::runtime::LiveView for QuoteView {
         table(&self.quotes)
     }
     fn priority(&self) -> &[usize] {
-        &[0, 2, 4, 1, 3, 12, 9, 8, 5, 6, 7, 10, 11]
+        &[0, 2, 4, 1, 3, 12, 13, 9, 8, 5, 6, 7, 10, 11]
     }
     fn help(&self) -> &'static str {
         "?  Help\nj / k / Ctrl+N / Ctrl+P / ↓ / ↑  Card below / above\nh / l / ← / →  Previous / next card\nPageUp / PageDown  Page\ng / G  First / last"

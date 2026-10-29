@@ -514,11 +514,11 @@ impl QuoteApi for SdkQuoteApi {
                     | TradeStatus::WILL_OPEN => MarketStatus::Pre,
                     TradeStatus::TRADING
                     | TradeStatus::US_TRADING
-                    | TradeStatus::US_AFTER
-                    | TradeStatus::US_NIGHT
                     | TradeStatus::CLOSE_BID
                     | TradeStatus::DARK_TRADING
                     | TradeStatus::AFTER_FIX => MarketStatus::Open,
+                    TradeStatus::US_AFTER => MarketStatus::Post,
+                    TradeStatus::US_NIGHT => MarketStatus::Overnight,
                     TradeStatus::CLOSING
                     | TradeStatus::US_CLOSING
                     | TradeStatus::HALF_CLOSING

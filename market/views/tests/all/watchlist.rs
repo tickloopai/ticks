@@ -69,7 +69,8 @@ async fn once_defaults_to_first_group_and_publishes_group_identity_without_decor
     assert_eq!(rows.as_array().unwrap().len(), 1);
     assert_eq!(rows[0]["symbol"], "700.HK");
     assert_eq!(rows[0]["change_percent"], "20");
-    assert_eq!(rows[0].as_object().unwrap().len(), 6);
+    assert_eq!(rows[0].as_object().unwrap().len(), 7);
+    assert_eq!(rows[0]["session"], "intraday");
     let event: serde_json::Value = events.records().all().remove(0);
     assert_eq!(event["data"]["group"], json!({"id":1,"name":"港股"}));
     assert_eq!(event["data"]["quotes"], rows);
@@ -515,4 +516,110 @@ async fn failed_group_switch_keeps_old_group_and_cleans_up_the_partial_new_subsc
     assert!(screen.contains("700.HK"), "{screen}");
     assert!(screen.contains("Unavailable"), "{screen}");
     assert!(api.0.subscriptions.lock().unwrap().is_empty());
+}
+
+struct ExtendedSessions {
+    live: LiveWatchlist,
+}
+
+#[async_trait]
+impl QuoteApi for ExtendedSessions {
+    async fn quotes(&self, _: &[String]) -> Result<Vec<Quote>> {
+        Ok(serde_json::from_value(json!([
+            {"symbol":"700.HK","name":"腾讯控股","latest_price":"480","previous_close":"400"},
+            {"symbol":"TSLA.US","name":"Tesla","latest_price":"110","previous_close":"100","session":"post"},
+            {"symbol":"NVDA.US","name":"NVIDIA","latest_price":"140","previous_close":"138"}
+        ]))
+        .unwrap())
+    }
+    async fn watchlist_groups(&self) -> Result<Vec<WatchlistGroup>> {
+        Ok(serde_json::from_value(
+            json!([{"id":1,"name":"Mixed","symbols":["700.HK","TSLA.US","NVDA.US"]}]),
+        )
+        .unwrap())
+    }
+    async fn market_states(&self, _: &[String]) -> Result<Vec<MarketState>> {
+        Ok(serde_json::from_value(
+            json!([{"market":"HK","status":"closed"},{"market":"US","status":"post"}]),
+        )
+        .unwrap())
+    }
+    async fn take_events(
+        &self,
+    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<tick_provider::api::MarketEvent>> {
+        self.live.take_events().await
+    }
+    async fn subscribe_quotes(&self, symbols: &[String]) -> Result<()> {
+        self.live.subscribe_quotes(symbols).await
+    }
+    async fn unsubscribe_quotes(&self, symbols: &[String]) -> Result<()> {
+        self.live.unsubscribe_quotes(symbols).await
+    }
+}
+
+/// The rows of `buffer` as a terminal shows them, each wide character once.
+fn screen_rows(buffer: &ratatui::buffer::Buffer) -> Vec<String> {
+    (0..buffer.area.height)
+        .map(|y| {
+            let mut line = String::new();
+            let mut covered = 0;
+            for x in 0..buffer.area.width {
+                if covered > 0 {
+                    covered -= 1;
+                    continue;
+                }
+                let symbol = buffer[(x, y)].symbol();
+                covered = tickloop_ui::format::width(symbol, Default::default()).saturating_sub(1);
+                line.push_str(symbol);
+            }
+            line
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn extended_hours_show_one_glyph_and_a_price_from_them_names_its_session() {
+    let (push, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let api = ExtendedSessions {
+        live: LiveWatchlist {
+            events: std::sync::Mutex::new(Some(receiver)),
+            subscriptions: std::sync::Mutex::new(Vec::new()),
+        },
+    };
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(
+        TickKind::Watchlist.minimum_panel_size().columns,
+        12,
+    ))
+    .unwrap();
+    let input = futures_util::stream::iter([Ok(crossterm::event::Event::Key(
+        crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('q'),
+            crossterm::event::KeyModifiers::NONE,
+        ),
+    ))]);
+    let mut updates = TickStream::in_memory(TickKind::Watchlist);
+    watchlist::run_live(
+        &WatchlistArgs {
+            group: None,
+            output: OnceArgs::default(),
+        },
+        &api,
+        &Settings::default(),
+        &mut terminal,
+        input,
+        &mut updates,
+    )
+    .await
+    .unwrap();
+    drop(push);
+    let rows = screen_rows(terminal.backend().buffer());
+    let closed = format!("┌ {} 700.HK ─", watchlist::MARKET_CLOSED_GLYPH);
+    assert!(rows[0].starts_with(&closed), "{rows:#?}");
+    let extended = format!("┌ {} TSLA.US 盘后 ─", watchlist::MARKET_EXTENDED_GLYPH);
+    assert!(rows[4].starts_with(&extended), "{rows:#?}");
+    let after_hours = format!("┌ {} NVDA.US ─", watchlist::MARKET_EXTENDED_GLYPH);
+    assert!(rows[8].starts_with(&after_hours), "{rows:#?}");
+    let data = updates.records().all().pop().unwrap()["data"].clone();
+    assert_eq!(data["quotes"][0]["session"], "intraday");
+    assert_eq!(data["quotes"][1]["session"], "post");
 }

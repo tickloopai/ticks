@@ -8,7 +8,7 @@ use ratatui::{
     widgets::{Block, Borders},
 };
 use std::cell::Cell;
-use tick_provider::api::Quote;
+use tick_provider::api::{Quote, QuoteSession};
 use tickloop_ui::{
     format::{truncate, width, write_text},
     settings::AmbiguousWidth,
@@ -30,6 +30,16 @@ const LOW: usize = 7;
 const PREVIOUS_CLOSE: usize = 8;
 const VOLUME: usize = 9;
 const TURNOVER: usize = 10;
+
+/// The label a card puts after its symbol when the price comes from outside the regular session.
+pub fn session_label(session: QuoteSession) -> Option<&'static str> {
+    match session {
+        QuoteSession::Intraday => None,
+        QuoteSession::Pre => Some("盘前"),
+        QuoteSession::Post => Some("盘后"),
+        QuoteSession::Overnight => Some("夜盘"),
+    }
+}
 
 /// The cards of a quote list and the number across them as last drawn, which moving up and
 /// down steps by.
@@ -145,8 +155,8 @@ impl CardGrid {
     }
 }
 
-/// Draws one quote as a bordered card: its marker, symbol and name on the border, the price and its change
-/// inside, then as many of the session's other figures as the card's width holds.
+/// Draws one quote as a bordered card: its marker, symbol, session and name on the border, the price
+/// and its change inside, then as many of the session's other figures as the card's width holds.
 fn draw_card(
     frame: &mut ratatui::Frame<'_>,
     card: Rect,
@@ -175,20 +185,37 @@ fn draw_card(
     } else {
         format!(" {marker} {} ", quote.symbol)
     };
-    let symbol_width = width(&symbol, ambiguous);
+    let label = session_label(quote.session)
+        .filter(|_| quote.error.is_none())
+        .map(|label| format!("{label} "));
+    let mut symbol_width = width(&symbol, ambiguous);
     let mut symbol_style = border_style.patch(styles.title);
     if quote.error.is_some() {
         symbol_style = symbol_style.patch(styles.error);
     }
+    let title_room = usize::from(card.width.saturating_sub(2));
     write_text(
         frame.buffer_mut(),
         card.x + 1,
         card.y,
         &symbol,
-        usize::from(card.width.saturating_sub(2)),
+        title_room,
         ambiguous,
         symbol_style,
     );
+    if let Some(label) = label.filter(|label| symbol_width + width(label, ambiguous) <= title_room)
+    {
+        write_text(
+            frame.buffer_mut(),
+            card.x + 1 + symbol_width as u16,
+            card.y,
+            &label,
+            title_room - symbol_width,
+            ambiguous,
+            border_style.patch(styles.price_mark),
+        );
+        symbol_width += width(&label, ambiguous);
+    }
     let name_room = usize::from(card.width.saturating_sub(2)).saturating_sub(symbol_width + 1);
     if name_room > 2 && !quote.name.is_empty() {
         let name = format!(" {} ", truncate(&quote.name, name_room - 2, ambiguous));

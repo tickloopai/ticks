@@ -16,8 +16,8 @@ use tick_provider::{
 };
 use tick_sdk::stream::TickStream;
 
-const QUOTE_COLUMNS: &[usize] = &[0, 1, 2, 3, 4, 9];
-pub const MARKET_PRE_GLYPH: &str = "◌";
+const QUOTE_COLUMNS: &[usize] = &[0, 1, 2, 3, 4, 9, 13];
+pub const MARKET_EXTENDED_GLYPH: &str = "◌";
 pub const MARKET_OPEN_GLYPH: &str = "▶";
 pub const MARKET_CLOSED_GLYPH: &str = "■";
 
@@ -84,15 +84,21 @@ impl WatchlistView {
         table
     }
 
-    /// The glyph of the trading state of the market `quote` trades in.
+    /// The glyph of the trading state of the market `quote` trades in. A price from outside the
+    /// regular session marks its card as extended hours whatever the market reports.
     fn market_glyph(&self, quote: &Quote) -> &'static str {
+        if crate::quote_cards::session_label(quote.session).is_some() {
+            return MARKET_EXTENDED_GLYPH;
+        }
         let status = self
             .market_states
             .iter()
             .find(|state| Some(state.market.as_str()) == symbol_market(&quote.symbol))
             .map_or(MarketStatus::Unknown, |state| state.status);
         match status {
-            MarketStatus::Pre => MARKET_PRE_GLYPH,
+            MarketStatus::Pre | MarketStatus::Post | MarketStatus::Overnight => {
+                MARKET_EXTENDED_GLYPH
+            }
             MarketStatus::Open => MARKET_OPEN_GLYPH,
             MarketStatus::Closed => MARKET_CLOSED_GLYPH,
             MarketStatus::Unknown => "?",
@@ -227,7 +233,7 @@ impl crate::runtime::LiveView for WatchlistView {
         WatchlistView::content(self)
     }
     fn priority(&self) -> &[usize] {
-        &[0, 4, 2, 1, 3, 5]
+        &[0, 4, 2, 1, 3, 6, 5]
     }
     fn refresh_interval(&self) -> Option<std::time::Duration> {
         Some(std::time::Duration::from_secs(30))
@@ -365,7 +371,7 @@ impl crate::runtime::LiveView for WatchlistView {
     }
 
     fn help(&self) -> &'static str {
-        "?  Help\nj / k / Ctrl+N / Ctrl+P / ↓ / ↑  Card below / above\nh / l  Previous / next card\nPageUp / PageDown  Page\ng / G  First / last\n[ / ] or ← / →  Group\nMarket: ◌ Pre · ▶ Trading · ■ Closed\n? Unknown market status"
+        "?  Help\nj / k / Ctrl+N / Ctrl+P / ↓ / ↑  Card below / above\nh / l  Previous / next card\nPageUp / PageDown  Page\ng / G  First / last\n[ / ] or ← / →  Group\nMarket: ◌ Pre-market, after-hours or overnight\n▶ Trading · ■ Closed\n? Unknown market status"
     }
 
     fn draw(

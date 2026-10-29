@@ -290,6 +290,8 @@ pub struct WatchlistGroup {
 pub enum MarketStatus {
     Pre,
     Open,
+    Post,
+    Overnight,
     Closed,
     #[default]
     Unknown,
