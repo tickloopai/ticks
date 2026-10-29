@@ -28,7 +28,7 @@ Install one with `tickloop tick install <package>`.
 | --- | --- | --- |
 | [`futu`](packages/futu) | 0.2.9 | Futu OpenD option chains, option pricing and implied volatility |
 | [`longbridge`](packages/longbridge) | 0.2.9 | Longbridge quotes, watchlist, kline, positions, news, earnings and community posts |
-| [`tickloop`](packages/tickloop) | 0.1.3 | Official Tickloop Ticks: the Reader for original financial documents from URLs or local files |
+| [`tickloop`](packages/tickloop) | 0.1.5 | Official Tickloop Ticks: the Reader for original financial documents from URLs or local files |
 
 ## Common commands
 
