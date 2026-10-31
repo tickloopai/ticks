@@ -22,6 +22,9 @@ const LAPTOP: (u16, u16) = (80, 24);
 const MONITOR_COLUMNS: u16 = 30;
 /// The width of a Monitor card the user has not narrowed.
 const MONITOR_CARD_COLUMNS: u16 = 40;
+/// A full-screen view in a 120×40 terminal: the view keeps the last row for its own keys, and a
+/// Tick's declared maximum rows do not limit it.
+const FULL_SCREEN: (u16, u16) = (120, 39);
 /// What the frame's bottom edge carries: the help and quit keys, or an open editor's keys.
 const STATUS_KEYS: [&str; 2] = [" ? ", "Ctrl+C Cancel"];
 const HELP_SCROLL_HINT: &str = "j/k more";
@@ -771,11 +774,12 @@ async fn every_tick_holds_its_layout_at_its_full_minimum_size() {
 }
 
 /// A Monitor card is 40 columns unless the user narrows it to 30, at least the Tick's minimum
-/// rows tall, and up to its maximum when the Monitor has room. The layout holds without scrolling the canvas and
-/// keeps the status row on the bottom line; what a short card leaves below the fold, such as
-/// an article's body or the positions' totals, the Tick's own keys scroll to.
+/// rows tall, and up to its maximum when the Monitor has room; full screen is taller than any
+/// maximum. The layout holds without scrolling the canvas and keeps the status row on the bottom
+/// line; what a short card leaves below the fold, such as an article's body or the positions'
+/// totals, the Tick's own keys scroll to.
 #[tokio::test(start_paused = true)]
-async fn every_tick_fits_the_monitor_card_sizes_inside_a_whole_frame() {
+async fn every_tick_fits_the_card_and_full_screen_sizes_inside_a_whole_frame() {
     let mut failures = Vec::new();
     for scenario in every_tick_at_the_minimum_width() {
         let minimum = scenario.minimum().rows;
@@ -785,6 +789,7 @@ async fn every_tick_fits_the_monitor_card_sizes_inside_a_whole_frame() {
                 .maximum_rows()
                 .map(|maximum| (MONITOR_CARD_COLUMNS, maximum)),
         );
+        sizes.push(FULL_SCREEN);
         for (columns, rows) in sizes {
             let cells = render(&scenario, columns, rows).await;
             let frame = text(&cells);

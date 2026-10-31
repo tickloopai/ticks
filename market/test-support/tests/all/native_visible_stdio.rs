@@ -98,9 +98,9 @@ fn next(receiver: &mpsc::Receiver<Value>) -> Value {
     receiver.recv_timeout(Duration::from_secs(10)).unwrap()
 }
 
-/// A host shows the Tick in a card and ends it itself: q and Ctrl+C reach the card as keys, so
-/// neither ends the Tick. The Tick tells the host it hands on the keys it has no use for, and
-/// Esc with nothing to go back from is one.
+/// A host shows the Tick in a card or full screen and ends it itself: q and Ctrl+C reach it as
+/// keys, so neither ends the Tick. The Tick tells the host it hands on the keys it has no use
+/// for, and Esc with nothing to go back from is one.
 #[test]
 fn a_hosted_tick_quits_on_no_key_and_bubbles_an_unused_esc() {
     let (mut child, mut tty, frames, screen) = visible_kline();

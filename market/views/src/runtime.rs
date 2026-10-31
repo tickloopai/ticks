@@ -56,7 +56,7 @@ pub fn in_instance() -> bool {
 }
 
 /// Whether the keys quit the Tick. A host ends the Ticks it runs itself and shows them in cards
-/// where a stray q or Ctrl+C must not end one, so a hosted Tick quits on no key.
+/// or full screen, where a stray q or Ctrl+C must not end one, so a hosted Tick quits on no key.
 pub fn quits_on_keys() -> bool {
     !in_instance()
 }
@@ -702,7 +702,7 @@ async fn handle_key<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Ev
         return Ok(KeyOutcome::Handled);
     } else if key.code == KeyCode::Esc {
         // Esc goes back a level as Backspace does; a host takes a second Esc soon after to leave
-        // the card, so nothing waits for one.
+        // the card or hide the full-screen view, so nothing waits for one.
         KeyCode::Backspace
     } else {
         key.code
