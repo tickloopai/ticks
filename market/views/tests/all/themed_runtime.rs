@@ -513,7 +513,8 @@ async fn dragging_a_card_through_many_sizes_ends_on_a_whole_screen_of_the_last_s
 }
 
 /// Keys that move between cards reach the host only when the Tick has no use for them: at the
-/// edge of its cards, with nothing to close, and with no fields to tab between.
+/// edge of its cards, with no fields to tab between, and Esc always, since Backspace is the back
+/// key.
 #[tokio::test(start_paused = true)]
 async fn the_keys_a_tick_has_no_use_for_bubble_to_its_host() {
     let press = |code| Ok(Event::Key(KeyEvent::new(code, KeyModifiers::NONE)));
@@ -532,6 +533,7 @@ async fn the_keys_a_tick_has_no_use_for_bubble_to_its_host() {
             KeyCode::BackTab,
             KeyCode::Char('?'),
             KeyCode::Esc,
+            KeyCode::Backspace,
         ] {
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             signals.send(press(code)).unwrap();
@@ -541,8 +543,8 @@ async fn the_keys_a_tick_has_no_use_for_bubble_to_its_host() {
     run_quote(&mut terminal, keys, script).await;
     assert_eq!(
         terminal.backend().bubbled,
-        ["up", "down", "left", "esc", "tab", "backtab"],
-        "the first card has nothing above or before it, the last nothing below; Esc closes the \
-         help it opened"
+        ["up", "down", "left", "esc", "tab", "backtab", "esc"],
+        "the first card has nothing above or before it, the last nothing below; Esc leaves the \
+         help open for Backspace to close"
     );
 }

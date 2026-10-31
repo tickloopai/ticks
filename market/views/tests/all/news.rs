@@ -146,6 +146,63 @@ async fn news_detail_returns_to_the_selected_item_without_extra_business_events(
     assert!(!screen.contains("中文小标题"));
 }
 
+/// Backspace is a Tick's back key; Esc is left to the host, so it keeps the article open.
+#[tokio::test]
+async fn esc_in_news_detail_keeps_the_article_open() {
+    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    use ratatui::{Terminal, backend::TestBackend};
+    use tick_provider::api::{Quote, QuoteApi};
+
+    struct NoQuotes;
+    #[async_trait]
+    impl QuoteApi for NoQuotes {
+        async fn quotes(&self, _: &[String]) -> Result<Vec<Quote>> {
+            panic!("news must not request quotes")
+        }
+    }
+    let api = News::default();
+    let (keys, input) = tokio::sync::mpsc::unbounded_channel();
+    let keyboard = tokio::spawn(async move {
+        for code in [
+            KeyCode::Down,
+            KeyCode::Enter,
+            KeyCode::Esc,
+            KeyCode::Char('q'),
+        ] {
+            tokio::time::sleep(std::time::Duration::from_millis(45)).await;
+            keys.send(Ok(Event::Key(KeyEvent::new(code, KeyModifiers::NONE))))
+                .unwrap();
+        }
+    });
+    let args = NewsArgs {
+        symbol: Some("700".into()),
+        limit: 3,
+        output: OnceArgs::default(),
+    };
+    let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+    news::run_live(
+        &args,
+        &NoQuotes,
+        &api,
+        &Settings::default(),
+        &mut terminal,
+        tokio_stream::wrappers::UnboundedReceiverStream::new(input),
+        &mut TickStream::in_memory(TickKind::News),
+    )
+    .await
+    .unwrap();
+    keyboard.await.unwrap();
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|cell| cell.symbol())
+        .filter(|symbol| *symbol != " ")
+        .collect();
+    assert!(screen.contains("第一条新闻正文"), "{screen}");
+}
+
 #[tokio::test(start_paused = true)]
 async fn periodic_news_refresh_preserves_selection_by_article_id() {
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};

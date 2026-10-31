@@ -1,7 +1,8 @@
 #![cfg(unix)]
 //! A market Tick run in a real terminal is a standalone program, also inside a Herdr Pane, and
-//! the keys it answers there. Ctrl+B belongs to the view around the Tick, Esc and Backspace return
-//! one level outside an editor, and an editor keeps q as text while Ctrl+C or Esc cancels it.
+//! the keys it answers there. Ctrl+B belongs to the view around the Tick, Backspace returns one
+//! level outside an editor while Esc does nothing there, and an editor keeps q as text while
+//! Ctrl+C or Esc cancels it.
 
 use std::{
     fs::File,

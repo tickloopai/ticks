@@ -28,7 +28,7 @@ use tickloop_ui::{
 
 const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
 const WIDE_PANEL_COLUMNS: u16 = 64;
-const HELP_TITLE: &str = " Keys · ? / Esc / Backspace close ";
+const HELP_TITLE: &str = " Keys · ? / Backspace close ";
 const NARROW_HELP_TITLE: &str = " Keys · ? close ";
 /// Under a help overlay too short for every key.
 const HELP_SCROLL_HINT: &str = " j/k more ";
@@ -666,7 +666,7 @@ async fn handle_key<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Ev
             .max(1);
         // The renderer clamps the offset to the keys the overlay holds.
         match (key.code, control) {
-            (KeyCode::Backspace | KeyCode::Esc, false) => state.help = false,
+            (KeyCode::Backspace, false) => state.help = false,
             (KeyCode::Char('j') | KeyCode::Down, false) | (KeyCode::Char('n'), true) => {
                 state.help_offset = state.help_offset.saturating_add(1)
             }
@@ -698,12 +698,10 @@ async fn handle_key<V: LiveView, B: Backend, S: Stream<Item = std::io::Result<Ev
     } else if key
         .modifiers
         .intersects(KeyModifiers::ALT | KeyModifiers::SUPER)
+        // The back key is Backspace; Esc changes nothing, so a host gets it to leave the card.
+        || key.code == KeyCode::Esc
     {
         return Ok(KeyOutcome::Handled);
-    } else if key.code == KeyCode::Esc {
-        // Esc goes back a level as Backspace does; a host takes a second Esc soon after to leave
-        // the card or hide the full-screen view, so nothing waits for one.
-        KeyCode::Backspace
     } else {
         key.code
     };
