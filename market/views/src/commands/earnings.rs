@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{io::Write, sync::Arc};
 
 use crossterm::event::KeyCode;
 use futures_util::future::{join, try_join, try_join_all};
@@ -110,6 +110,10 @@ pub struct SelectPeriodArgs {
 struct EmptyArgs {}
 
 pub fn tools() -> crate::tools::Tools {
+    tools_with_table(None)
+}
+
+fn tools_with_table(observed: Option<Arc<EarningsTable>>) -> crate::tools::Tools {
     crate::tools::Tools::default()
         .query::<HistoryArgs>(
             HISTORY_TOOL,
@@ -123,13 +127,32 @@ pub fn tools() -> crate::tools::Tools {
         )
         .query::<DetailArgs>(
             DETAIL_TOOL,
-            "One exact released fiscal period, actuals/estimates, fiscal YoY/QoQ, statement items, business segments, source/time metadata and company filing URLs. Missing historical estimate snapshots remain missing.",
-            |api: &QuoteServices, args| {
+            "One exact released fiscal period, actuals/estimates, fiscal YoY/QoQ, statement items, business segments, source/time metadata and company filing URLs. Reuses this Tick's current observation when it includes the requested and comparison periods; otherwise fetches data. Missing historical estimate snapshots remain missing.",
+            move |api: &QuoteServices, args| {
+                let observed = observed.clone();
                 Box::pin(async move {
                     let request = EarningsRequest::new(&args.symbol, Some(MAX_PERIOD_COUNT))?;
-                    let table = load(api, &request, today()).await?;
-                    let selected = find_period(&table, &args.period_id)?;
-                    serde_json::to_value(earnings::review::detail(&table, selected))
+                    let detail = observed
+                        .filter(|table| table.symbol == request.symbol)
+                        .and_then(|table| {
+                            let selected = find_period(&table, &args.period_id).ok()?;
+                            let detail = earnings::review::detail(&table, selected)?;
+                            (table.rows.len() == MAX_PERIOD_COUNT
+                                || detail.metrics.iter().all(|metric| {
+                                    metric.yoy.baseline_period_id.is_some()
+                                        && metric.qoq.baseline_period_id.is_some()
+                                }))
+                            .then_some(detail)
+                        });
+                    let detail = match detail {
+                        Some(detail) => Some(detail),
+                        None => {
+                            let table = load(api, &request, today()).await?;
+                            let selected = find_period(&table, &args.period_id)?;
+                            earnings::review::detail(&table, selected)
+                        }
+                    };
+                    serde_json::to_value(detail)
                         .map_err(|error| Error::usage(error.to_string()))
                 })
             },
@@ -471,7 +494,7 @@ enum EarningsMode {
 
 pub struct EarningsView {
     request: EarningsRequest,
-    table: EarningsTable,
+    table: Arc<EarningsTable>,
     prompt: Option<SymbolPrompt>,
     refresh_in: std::time::Duration,
     mode: EarningsMode,
@@ -487,7 +510,7 @@ impl EarningsView {
         let refresh_in = monitoring_interval(&table, today());
         Self {
             request,
-            table,
+            table: Arc::new(table),
             prompt: None,
             refresh_in,
             mode: EarningsMode::Comparison,
@@ -605,7 +628,7 @@ impl EarningsView {
         self.prompt = None;
         self.refresh_in = monitoring_interval(&table, today());
         self.pending_context = None;
-        self.table = table;
+        self.table = Arc::new(table);
         self.request = request;
         self.selected_period = 0;
         self.mode = EarningsMode::Comparison;
@@ -813,6 +836,9 @@ fn metric_search_terms(field: &str, name: &str) -> Vec<String> {
 
 #[async_trait::async_trait]
 impl LiveView for EarningsView {
+    fn tools(&self) -> crate::tools::Tools {
+        tools_with_table(Some(Arc::clone(&self.table)))
+    }
     fn research_context(&self) -> Option<ResearchContext> {
         self.current_context()
     }
@@ -911,7 +937,7 @@ impl LiveView for EarningsView {
             }
         }
         let had_pending = self.pending_context.take().is_some();
-        self.table = table;
+        self.table = Arc::new(table);
         self.request = request;
         if !had_pending
             && let Some(selected) = selected_id.and_then(|id| find_period(&self.table, &id).ok())

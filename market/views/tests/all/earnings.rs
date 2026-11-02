@@ -978,6 +978,9 @@ impl QuoteApi for Gated {
     async fn key_financial_metrics(&self, symbol: &str) -> Result<Vec<ReportDate>> {
         self.inner.key_financial_metrics(symbol).await
     }
+    async fn fiscal_period_ends(&self, symbol: &str) -> Result<Vec<FiscalPeriodEnd>> {
+        self.inner.fiscal_period_ends(symbol).await
+    }
     async fn report_calendar(&self, request: &ReportCalendarRequest) -> Result<ReportCalendarPage> {
         self.inner.report_calendar(request).await
     }
@@ -1224,6 +1227,97 @@ async fn changing_the_panel_symbol_publishes_the_new_table_as_a_tick_update() {
     assert_eq!(update["method"], "tick/update");
     assert_eq!(update["params"]["seq"], 2);
     assert_eq!(update["params"]["data"]["symbol"], "NVDA.US");
+    panel.finish().await;
+}
+
+#[tokio::test]
+async fn detail_calls_reuse_the_latest_panel_observation() {
+    let mut api = Gated::new(today(), "unused", Arc::new(tokio::sync::Semaphore::new(0)));
+    api.inner = Fundamentals::with_calendar_only_quarters(today(), 4);
+    let api = Arc::new(api);
+    let mut panel = Panel::start(api.clone(), "TSLA", Some(6));
+    let mut snapshot = panel.frame().await;
+    for (id, symbol) in [(1, "tsla"), (2, "nvda")] {
+        if id == 2 {
+            panel.press(KeyCode::Char('s'));
+            panel.type_text(symbol);
+            panel.press(KeyCode::Enter);
+            snapshot = panel.frame().await;
+        }
+        let data = &snapshot["params"]["data"];
+        panel
+            .request(serde_json::json!({
+                "jsonrpc": "2.0", "id": id, "method": "tick/call",
+                "params": {"tool": "detail", "revision": "1", "args": {
+                    "symbol": symbol, "period_id": data["latest"]["period_id"]
+                }}
+            }))
+            .await;
+        let answer = panel.frame().await;
+        assert_eq!(answer["id"], id);
+        assert_eq!(answer["result"]["symbol"], data["symbol"], "{answer}");
+        assert_eq!(answer["result"]["period_id"], data["latest"]["period_id"]);
+        assert_eq!(answer["result"]["observed_at"], data["observed_at"]);
+        assert_eq!(
+            api.consensus_symbols().len(),
+            id as usize,
+            "detail must not reload a period already observed by the panel"
+        );
+    }
+    assert_eq!(api.consensus_symbols(), ["TSLA.US", "NVDA.US"]);
+    panel.finish().await;
+}
+
+#[tokio::test]
+async fn detail_calls_fill_missing_comparison_periods() {
+    let mut api = Gated::new(today(), "unused", Arc::new(tokio::sync::Semaphore::new(0)));
+    api.inner = Fundamentals::with_calendar_only_quarters(today(), 4);
+    let api = Arc::new(api);
+    let mut panel = Panel::start(api.clone(), "TSLA", Some(2));
+    let snapshot = panel.frame().await;
+    panel
+        .request(serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tick/call",
+            "params": {"tool": "detail", "revision": "1", "args": {
+                "symbol": "TSLA", "period_id": snapshot["params"]["data"]["latest"]["period_id"]
+            }}
+        }))
+        .await;
+    let answer = panel.frame().await;
+    assert!(
+        answer["result"]["metrics"][0]["yoy"]["baseline_period_id"].is_string(),
+        "{answer}"
+    );
+    assert_eq!(api.consensus_symbols(), ["TSLA.US", "TSLA.US"]);
+    panel.finish().await;
+}
+
+#[tokio::test]
+async fn detail_calls_load_periods_outside_the_panel_observation() {
+    let api = Arc::new(Gated::new(
+        today(),
+        "unused",
+        Arc::new(tokio::sync::Semaphore::new(0)),
+    ));
+    let older = &api.inner.quarters[2];
+    let period_id = format!("FY{}-Q{}", older.0, older.1);
+    let mut panel = Panel::start(api.clone(), "TSLA", Some(2));
+    let snapshot = panel.frame().await;
+    assert_eq!(snapshot["params"]["data"]["history"]["periods"], 2);
+    for (id, symbol) in [(1, "TSLA.US"), (2, "NVDA.US")] {
+        panel
+            .request(serde_json::json!({
+                "jsonrpc": "2.0", "id": id, "method": "tick/call",
+                "params": {"tool": "detail", "revision": "1", "args": {
+                    "symbol": symbol, "period_id": period_id
+                }}
+            }))
+            .await;
+        let answer = panel.frame().await;
+        assert_eq!(answer["result"]["symbol"], symbol, "{answer}");
+        assert_eq!(answer["result"]["period_id"], period_id);
+    }
+    assert_eq!(api.consensus_symbols(), ["TSLA.US", "TSLA.US", "NVDA.US"]);
     panel.finish().await;
 }
 

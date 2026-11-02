@@ -364,7 +364,6 @@ pub async fn run<
 ) -> Result<()> {
     let mut requests = updates.take_requests();
     let mut requests_closed = false;
-    let tools = view.tools();
     let mut running_calls = FuturesUnordered::new();
     let mut state = ViewState::default();
     let mut viewport = ScrollViewport::default();
@@ -404,6 +403,7 @@ pub async fn run<
                     }
                     Some(line) => {
                         if let Some(call) = updates.dispatch(line) {
+                            let tools = view.tools();
                             match accept_tool_call(&tools, api, call, running_calls.len()) {
                                 Ok(AcceptedToolCall::Query(running)) => running_calls.push(running),
                                 Ok(AcceptedToolCall::Action { id, call }) => {
