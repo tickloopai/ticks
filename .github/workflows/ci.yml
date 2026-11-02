@@ -21,12 +21,12 @@ env:
 # musl target the Linux packages are released for.
 jobs:
   test:
-    name: Format, lint and test (${{ matrix.os }})
+    name: Format, lint and test (${{ join(matrix.os, ' ') }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, ubuntu-24.04]
+        os: [[self-hosted, Tester, macOS], [self-hosted, Linux]]
     timeout-minutes: 60
     steps:
       - name: Check out
@@ -42,8 +42,17 @@ jobs:
       - name: Install musl-tools
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
+          if ! command -v musl-gcc > /dev/null; then
+            if command -v apt-get > /dev/null; then
+              sudo apt-get update
+              sudo apt-get install --yes --no-install-recommends musl-tools
+            elif command -v pacman > /dev/null; then
+              sudo pacman -S --needed --noconfirm musl
+            else
+              echo '::error::Install musl-gcc on this runner.'
+              exit 1
+            fi
+          fi
 
       - name: Set up Rust
         run: |

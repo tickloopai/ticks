@@ -34,7 +34,7 @@ env:
 jobs:
   release:
     name: Bump, tag and start the package releases
-    runs-on: macos-15
+    runs-on: [self-hosted, Tester, macOS]
     timeout-minutes: 60
     permissions:
       contents: write

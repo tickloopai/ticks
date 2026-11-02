@@ -107,9 +107,9 @@ The release runs from the committed `HEAD` of a branch that includes `origin`'s 
 Pushing a tag starts nothing by itself. The release workflow, one package at a time:
 
 0. CI: the full suite on macOS and Linux (`.github/workflows/ci.yml`). Pushes and pull requests do not start CI, to save hosted runners; run `make check` locally, or start CI by hand from the Actions tab.
-1. Build and check, once per target on a runner of that architecture (`macos-15` for both macOS targets, the x86_64 one under Rosetta; `ubuntu-24.04` and `ubuntu-24.04-arm` for Linux): build the program, check the archive's contents, its architecture (and on Linux that it is statically linked), the ad-hoc signature on macOS, that `--help` runs and `--version` reports the version, and install it with the latest released Tickloop for that runner.
+1. Build and check, once per target on a runner of that architecture (the self-hosted `Packager` Mac for both macOS targets, the x86_64 one under Rosetta; the self-hosted `Packager` X64 machine and GitHub's `ubuntu-24.04-arm` for Linux): build the program, check the archive's contents, its architecture (and on Linux that it is statically linked), the ad-hoc signature on macOS, that `--help` runs and `--version` reports the version, and install it with the latest released Tickloop for that runner.
 2. Publish, only after all four targets built: create the package's Release on its tag with every target's archive (completing a Release an earlier attempt left part way), then commit the updated `marketplace.json` and the README's "Packages" section to the default branch. A Release that already exists with the same archive is kept; a different archive is refused, and `marketplace.json` never moves to an older version.
-3. Verify: download every asset anonymously and compare its SHA-256.
+3. Verify: download every asset through `gh` (the repository is private) and compare its SHA-256.
 
 If a stage fails, fix the cause and re-run the failed jobs; do not release again to bump versions. The job log prints the commands that finish or withdraw a partial release.
 

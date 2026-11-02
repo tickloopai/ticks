@@ -354,8 +354,9 @@ verify_release() {
             expected=$(sha256_of "$archives/$name")
             url=$release_downloads/$package-v$version/$name
             attempt=1
-            # Without credentials, as anyone installing the package downloads it.
-            until curl -fsSL -o "$scratch/$name" "$url"; do
+            # The repository is private, so the release assets are read through gh with a token.
+            until gh release download "$package-v$version" --repo "$repository" --pattern "$name" \
+                --dir "$scratch" --clobber; do
                 [ "$attempt" -lt "$download_attempts" ] || fail "Could not download $url."
                 attempt=$((attempt + 1))
                 sleep "$download_retry_seconds"

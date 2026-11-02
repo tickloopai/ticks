@@ -30,7 +30,7 @@ env:
 jobs:
   check:
     name: Check the tag and release scripts
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 10
     steps:
       - name: Check out the tagged source
@@ -79,16 +79,16 @@ jobs:
       matrix:
         include:
           - target: aarch64-apple-darwin
-            runner: macos-15
+            runner: [self-hosted, Packager, ARM64]
             tickloop: aarch64-apple-darwin
           - target: x86_64-apple-darwin
-            runner: macos-15
+            runner: [self-hosted, Packager, ARM64]
             tickloop: aarch64-apple-darwin
           - target: aarch64-unknown-linux-musl
             runner: ubuntu-24.04-arm
             tickloop: aarch64-unknown-linux-musl
           - target: x86_64-unknown-linux-musl
-            runner: ubuntu-24.04
+            runner: [self-hosted, Packager, X64]
             tickloop: x86_64-unknown-linux-musl
     env:
       RELEASE_TARGET: ${{ matrix.target }}
@@ -101,8 +101,17 @@ jobs:
       - name: Install musl-tools
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
+          if ! command -v musl-gcc > /dev/null; then
+            if command -v apt-get > /dev/null; then
+              sudo apt-get update
+              sudo apt-get install --yes --no-install-recommends musl-tools
+            elif command -v pacman > /dev/null; then
+              sudo pacman -S --needed --noconfirm musl
+            else
+              echo '::error::Install musl-gcc on this runner.'
+              exit 1
+            fi
+          fi
 
       - name: Install Rosetta
         if: matrix.target == 'x86_64-apple-darwin'
@@ -155,7 +164,7 @@ jobs:
   publish:
     name: Publish the releases and update the marketplace
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 15
     permissions:
       contents: write
@@ -191,7 +200,7 @@ jobs:
   verify:
     name: Verify downloads
     needs: publish
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 10
     steps:
       - name: Check out the tagged source
@@ -206,5 +215,7 @@ jobs:
           merge-multiple: true
           path: dist/release
 
-      - name: Download every release asset anonymously
+      - name: Download every release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: scripts/release-ticks.sh verify dist/release
