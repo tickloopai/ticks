@@ -30,24 +30,24 @@
     },
     {
       "name": "longbridge",
-      "version": "0.2.10",
+      "version": "0.2.11",
       "description": "Longbridge quotes, watchlist, kline, positions, news, earnings and community posts",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-aarch64-apple-darwin.tar.gz",
-          "sha256": "d7d78b77e8237245e6f60630154b2f73b4b2fad3fefd089b2e414d19de6c4676"
+          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.11/tick-longbridge-0.2.11-aarch64-apple-darwin.tar.gz",
+          "sha256": "6473971be4a4154d21d4667aeaebd3ec705bb1a2e2261f5ef9aff55eb6209795"
         },
         "x86_64-apple-darwin": {
-          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-x86_64-apple-darwin.tar.gz",
-          "sha256": "d6788a2da4287dc36fc0b82f4317acfa5bcb78f30c6477152b45d90f21c35b6d"
+          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.11/tick-longbridge-0.2.11-x86_64-apple-darwin.tar.gz",
+          "sha256": "899705db849f0907f5462647216c5007be436c611bd81a60a6a70878446ac2e5"
         },
         "aarch64-unknown-linux-musl": {
-          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-aarch64-unknown-linux-musl.tar.gz",
-          "sha256": "dad3d1f21d59e86a7e06922a8efeb0a1ac54b8f1d69e496275be5dad64a8d484"
+          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.11/tick-longbridge-0.2.11-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "719453129d4a35a36576ffeea8ecfc05912657f54dfd4a9f18b332a10861dcb8"
         },
         "x86_64-unknown-linux-musl": {
-          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-x86_64-unknown-linux-musl.tar.gz",
-          "sha256": "0bfb6067d94d3cdd95104f02533f0bc8afcc045c7ac0d53a238844932b7d4205"
+          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.11/tick-longbridge-0.2.11-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "9ab04f50159384880b5a16a2ab00c13a03b44b674b063d0d2ccf65566a35f520"
         }
       }
     },
