@@ -1,7 +1,7 @@
 # Build against a sibling Tickloop checkout instead of the commit locked in Cargo.lock, for
 # changes that span both repositories:
 #
-#   git clone https://github.com/tickloopai/tickloop ../tickloop
+#   git clone https://github.com/longbridge/tickloop ../tickloop
 #   cp .cargo/config.toml.example .cargo/config.toml
 #
 # To build against a Tickloop worktree instead, replace ../tickloop below with its path.
@@ -10,7 +10,7 @@
 # not valid for CI: delete .cargo/config.toml and run `cargo update -p tickloop-tick-sdk`
 # before committing Cargo.lock. Release builds run in a fresh checkout and never read it.
 
-[patch."https://github.com/tickloopai/tickloop"]
+[patch."https://github.com/longbridge/tickloop"]
 tickloop-tick-oauth = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/tick/oauth" }
 tickloop-tick-oauth-test-server = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/tick/oauth-test-server" }
 tickloop-tick-packages = { path = "/Users/griffin/.herdr/worktrees/tickloop/feat-plugin/tick/packages" }

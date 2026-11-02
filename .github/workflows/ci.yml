@@ -12,7 +12,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
-# The packages depend on the Tickloop crates in tickloopai/tickloop through Git; fetching them
+# The packages depend on the Tickloop crates in longbridge/tickloop through Git; fetching them
 # needs that repository to be public (or a token with read access configured for Cargo).
 # The packages ship for macOS and Linux, so both run the whole suite; Linux also lints the static
 # musl target the Linux packages are released for.

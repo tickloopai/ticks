@@ -53,7 +53,7 @@ if (path.basename(process.argv[1]) === 'curl') {
 }
 `;
   for (const program of ["gh", "curl"]) { writeFileSync(join(bin, program), mock); chmodSync(join(bin, program), 0o700); }
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", RELEASE_TAG: "longbridge-v0.2.1", RELEASE_COMMIT: "a".repeat(40), GITHUB_REPOSITORY: "tickloopai/ticks", RELEASE_TEST_STORE: releases, RELEASE_TEST_CALLS: join(root, "calls.log") };
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", RELEASE_TAG: "longbridge-v0.2.1", RELEASE_COMMIT: "a".repeat(40), GITHUB_REPOSITORY: "longbridge/ticks", RELEASE_TEST_STORE: releases, RELEASE_TEST_CALLS: join(root, "calls.log") };
   delete env.GITHUB_STEP_SUMMARY; delete env.GIT_DIR; delete env.GIT_WORK_TREE; delete env.GIT_INDEX_FILE;
   const setup = { root, market, archives, archiveName, archiveNames, releases, originalFutu, env };
   git(["init", "--bare", "-q", remote], setup); git(["init", "-q", "-b", "main"], setup);
@@ -71,14 +71,14 @@ test("a package tag publishes and verifies only that package at its own version,
   assert.equal(catalog.packages.find(p => p.name === "longbridge").version, "0.2.1");
   const downloads = catalog.packages.find(p => p.name === "longbridge").downloads;
   assert.deepEqual(Object.keys(downloads), targets);
-  for (const target of targets) assert.equal(downloads[target].url, `https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.1/tick-longbridge-0.2.1-${target}.tar.gz`);
+  for (const target of targets) assert.equal(downloads[target].url, `https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.1/tick-longbridge-0.2.1-${target}.tar.gz`);
   const readme = readFileSync(join(setup.market, "README.md"), "utf8");
   assert.ok(readme.includes("| [`longbridge`](packages/longbridge) | 0.2.1 | longbridge data |"));
   assert.ok(readme.includes("| [`futu`](packages/futu) | 0.3.0 | Futu |"));
   assert.ok(!readme.includes("Old list")); assert.ok(readme.includes("## Building from source\n\nKept\n"));
   const calls = readFileSync(setup.env.RELEASE_TEST_CALLS, "utf8");
-  assert.match(calls, /^gh release create longbridge-v0\.2\.1 --repo tickloopai\/ticks --verify-tag /m);
-  assert.deepEqual([...calls.matchAll(/^gh release upload longbridge-v0\.2\.1 \S*\/(\S+) --repo tickloopai\/ticks --clobber$/gm)].map(match => match[1]), setup.archiveNames);
+  assert.match(calls, /^gh release create longbridge-v0\.2\.1 --repo longbridge\/ticks --verify-tag /m);
+  assert.deepEqual([...calls.matchAll(/^gh release upload longbridge-v0\.2\.1 \S*\/(\S+) --repo longbridge\/ticks --clobber$/gm)].map(match => match[1]), setup.archiveNames);
   const commit = git(["rev-parse", "HEAD"], setup);
   result = release(setup, "publish", setup.market, setup.archives); assert.equal(result.status, 0, result.stderr);
   assert.equal(git(["rev-parse", "HEAD"], setup), commit);

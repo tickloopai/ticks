@@ -1,6 +1,6 @@
 # Third-party notices
 
-This file records the source and applicable license of third-party code adapted into the Tick packages in this repository, and into the [Tickloop](https://github.com/tickloopai/tickloop) crates their programs link. Every package archive carries this file and the license copies it names. The Tickloop repository keeps its own notices for its crates. Other dependencies retain their own licenses.
+This file records the source and applicable license of third-party code adapted into the Tick packages in this repository, and into the [Tickloop](https://github.com/longbridge/tickloop) crates their programs link. Every package archive carries this file and the license copies it names. The Tickloop repository keeps its own notices for its crates. Other dependencies retain their own licenses.
 
 ## Longbridge Terminal pure functions
 

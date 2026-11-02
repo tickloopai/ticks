@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compareVersions, nextVersion, readProducts, versionChanges } from "./release-versions.mjs";
 
-const expectedRepository = "tickloopai/ticks";
+const expectedRepository = "longbridge/ticks";
 const allowedRemoteUrls = new Set([
   `git@github.com:${expectedRepository}`, `git@github.com:${expectedRepository}.git`,
   `ssh://git@github.com/${expectedRepository}`, `ssh://git@github.com/${expectedRepository}.git`,

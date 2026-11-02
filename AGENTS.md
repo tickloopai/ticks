@@ -4,7 +4,7 @@ The official Tick marketplace for Tickloop and the source of its Tick packages. 
 
 ## Baseline and documents
 
-- Shared terms follow Tickloop's [CONTEXT.md](https://github.com/tickloopai/tickloop/blob/main/CONTEXT.md); terms specific to this repository are in [CONTEXT.md](./CONTEXT.md). Use those names in code, UI and discussion.
+- Shared terms follow Tickloop's [CONTEXT.md](https://github.com/longbridge/tickloop/blob/main/CONTEXT.md); terms specific to this repository are in [CONTEXT.md](./CONTEXT.md). Use those names in code, UI and discussion.
 - When a change conflicts with documented behavior, say so; never change a meaning silently. When documents and source disagree, the source wins.
 - Division of documents: agent instructions live only in AGENTS.md (no CLAUDE.md); CONTEXT.md holds term definitions only; README.md describes user-facing usage only; development, checks, tests and releases are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 - `.scratch/` and `docs/` are maintainer-local and excluded by `.gitignore`; a new feature's spec goes in `.scratch/<feature>/`. Pointers to them apply only when they exist.
@@ -39,8 +39,8 @@ The official Tick marketplace for Tickloop and the source of its Tick packages. 
 
 Dependency boundaries:
 
-- Only domain-agnostic crates come from tickloopai/tickloop: `tickloop-tick-{oauth,oauth-test-server,packages,protocol,sdk}`, `tickloop-ui` and the `crossterm` patch, by Git from `branch = "main"`; `Cargo.lock` holds the exact commit. Track the Tick protocol, never Tickloop's app versions. Tickloop must never depend on this repository.
-- Changes to the domain-agnostic Tick crates go to tickloopai/tickloop first; financial Tick and provider changes belong in `market/` here. For cross-repo work use `.cargo/config.toml.example`; see "Building against a local Tickloop" in CONTRIBUTING.md.
+- Only domain-agnostic crates come from longbridge/tickloop: `tickloop-tick-{oauth,oauth-test-server,packages,protocol,sdk}`, `tickloop-ui` and the `crossterm` patch, by Git from `branch = "main"`; `Cargo.lock` holds the exact commit. Track the Tick protocol, never Tickloop's app versions. Tickloop must never depend on this repository.
+- Changes to the domain-agnostic Tick crates go to longbridge/tickloop first; financial Tick and provider changes belong in `market/` here. For cross-repo work use `.cargo/config.toml.example`; see "Building against a local Tickloop" in CONTRIBUTING.md.
 - Packages depend on `market/` crates, never on each other; `market/provider` depends on no other workspace crate.
 
 ## Read before changing
@@ -54,7 +54,7 @@ Dependency boundaries:
 | `tick-package.json` or authentication declarations | "Package manifest" in CONTRIBUTING.md |
 | Releases, targets, `marketplace.json` | "Releasing" in CONTRIBUTING.md |
 | A Tick's layout, sizes, keys or redrawing | "Tick screens in cards and full screen" in CONTRIBUTING.md |
-| The Tick protocol or SDK | `tick/protocol/SPECIFICATION.md` in tickloopai/tickloop |
+| The Tick protocol or SDK | `tick/protocol/SPECIFICATION.md` in longbridge/tickloop |
 
 ## Verification
 

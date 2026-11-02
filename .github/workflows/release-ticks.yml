@@ -22,7 +22,7 @@ env:
 # without repeating the stages that already passed. A repeated publish keeps the releases an
 # earlier attempt created, as long as they carry the same archives. Releases reuse the pushed
 # <package>-vX.Y.Z tag; the marketplace update is a commit to the default branch.
-# The build fetches the Tickloop crates from tickloopai/tickloop, which must be public.
+# The build fetches the Tickloop crates from longbridge/tickloop, which must be public.
 jobs:
   check:
     name: Check the tag and release scripts
@@ -156,7 +156,7 @@ jobs:
       contents: write
     environment:
       name: tick-marketplace
-      url: https://github.com/tickloopai/ticks
+      url: https://github.com/longbridge/ticks
     steps:
       - name: Check out the tagged source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

@@ -8,7 +8,7 @@
 set -eu
 
 targets="aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl"
-repository=tickloopai/ticks
+repository=longbridge/ticks
 release_downloads=https://github.com/$repository/releases/download
 test_support_crate=tickloop-tick-test-support
 download_attempts=6

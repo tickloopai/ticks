@@ -6,16 +6,16 @@ Issues and pull requests are welcome. Agent instructions and the repository layo
 
 The packages build with current stable Rust (edition 2024) on macOS and Linux. Linux builds of the released musl targets need `musl-tools` (`musl-gcc`). `make test` needs [cargo-nextest](https://nexte.st) (`cargo install --locked cargo-nextest`) and Node.js for the release script tests.
 
-The packages link the domain-agnostic Tick crates from [tickloopai/tickloop](https://github.com/tickloopai/tickloop) (the Tick protocol and SDK, terminal UI, package credentials and OAuth), fetched by Git from Tickloop's `main` while the Tick protocol is a draft; `Cargo.lock` records the exact commit. To move to Tickloop's latest `main`, run `cargo update -p tickloop-tick-sdk` and commit `Cargo.lock`. The dependency follows the Tick protocol, not Tickloop's release versions: once the protocol is stable, `branch = "main"` becomes the protocol's own tag.
+The packages link the domain-agnostic Tick crates from [longbridge/tickloop](https://github.com/longbridge/tickloop) (the Tick protocol and SDK, terminal UI, package credentials and OAuth), fetched by Git from Tickloop's `main` while the Tick protocol is a draft; `Cargo.lock` records the exact commit. To move to Tickloop's latest `main`, run `cargo update -p tickloop-tick-sdk` and commit `Cargo.lock`. The dependency follows the Tick protocol, not Tickloop's release versions: once the protocol is stable, `branch = "main"` becomes the protocol's own tag.
 
 ### Building against a local Tickloop
 
 ```sh
-git clone https://github.com/tickloopai/tickloop ../tickloop
+git clone https://github.com/longbridge/tickloop ../tickloop
 cp .cargo/config.toml.example .cargo/config.toml
 ```
 
-`.cargo/config.toml` is ignored by Git. Lock entries resolved through it are not valid for CI, so remove it and run `cargo update -p tickloop-tick-sdk` before committing `Cargo.lock`. Changes the domain-agnostic Tick crates need go to tickloopai/tickloop first.
+`.cargo/config.toml` is ignored by Git. Lock entries resolved through it are not valid for CI, so remove it and run `cargo update -p tickloop-tick-sdk` before committing `Cargo.lock`. Changes the domain-agnostic Tick crates need go to longbridge/tickloop first.
 
 ## Checks
 
@@ -38,7 +38,7 @@ TICKLOOP_CONFIG_DIR=$(mktemp -d) NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1
 
 ## Tick screens in cards and full screen
 
-Tickloop shows a hosted Tick as a card in the Ticks group of its Monitor, or full screen in `tickloop attach`, and the user's keys go straight to the Tick while its card or full-screen view has the keyboard; the rules are in the `screen` section of `tick/protocol/SPECIFICATION.md` in tickloopai/tickloop. Every financial Tick runs through `runtime::run` in `market/views/src/runtime.rs`, which implements the shared parts below, so a view only has to lay itself out and use its keys as described here.
+Tickloop shows a hosted Tick as a card in the Ticks group of its Monitor, or full screen in `tickloop attach`, and the user's keys go straight to the Tick while its card or full-screen view has the keyboard; the rules are in the `screen` section of `tick/protocol/SPECIFICATION.md` in longbridge/tickloop. Every financial Tick runs through `runtime::run` in `market/views/src/runtime.rs`, which implements the shared parts below, so a view only has to lay itself out and use its keys as described here.
 
 - **Frame.** The runtime draws a whole frame around every view and hands the view only what is inside it, so nothing a view draws can show outside the frame. The top edge carries only the title the view gives through `ViewState::title`, as the Monitor's row already shows when the Tick updates; the bottom edge carries the Help and Quit keys on its right and the last error on its left, and the keys give way to the help key alone before what the left says is cut. No row goes to a title or a status of its own. A view whose content is bordered cards (Quote, Watchlist) draws no frame (`LiveView::framed`): its cards fill the screen, and the last card shown carries the bottom edge's labels, led by which cards show when not all fit. The Monitor already names the Tick and its symbols, so a title leaves out the view's name (no `Quotes`, `News · Market`) and keeps what tells this view apart, such as the period, group, account or mode; it must fit whole on a 30-column frame (`runtime::frame_title_columns`), so give each view a shorter fallback rather than let it be cut.
 - **Width.** A card is 40 columns unless the user narrows it, down to 30 (`MINIMUM_PANEL_COLUMNS`), its frame included. Lay every view out for 30 columns: give up secondary columns and shorten names and key hints first (`draw_table` column priorities, `fit_hints`, `pack_fields`). Scrolling over the minimum layout is only the fallback for a Panel smaller than the minimum.
@@ -115,7 +115,7 @@ If a stage fails, fix the cause and re-run the failed jobs; do not release again
 
 A new target is added in `targets` of `scripts/release-ticks.sh`, the build matrix of `release-ticks.yml` and `host_target` of `scripts/package-ticks.sh`.
 
-Repository settings: the publish job writes with the workflow's own `GITHUB_TOKEN` (it requests `contents: write`), so no secret is needed; if the default branch is protected, let `github-actions[bot]` push to it. The publish job runs in the `tick-marketplace` environment, where you can require reviewers. The build needs `tickloopai/tickloop` to be public to fetch the Tick crates.
+Repository settings: the publish job writes with the workflow's own `GITHUB_TOKEN` (it requests `contents: write`), so no secret is needed; if the default branch is protected, let `github-actions[bot]` push to it. The publish job runs in the `tick-marketplace` environment, where you can require reviewers. The build needs `longbridge/tickloop` to be public to fetch the Tick crates.
 
 ## License
 

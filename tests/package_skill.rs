@@ -1,6 +1,6 @@
 //! Checks shared by every package's shipped Skill, included by each package's integration tests.
 
-/// Every tool the Tickloop Agent can offer the model, by name. Keep in sync with tickloopai/tickloop:
+/// Every tool the Tickloop Agent can offer the model, by name. Keep in sync with longbridge/tickloop:
 /// `built_in_definitions` and `ARTIFACT_TOOL_NAMES` in `agent/runtime`, and the shared Task tools.
 const AGENT_TOOLS: [&str; 37] = [
     "ArtifactComment",

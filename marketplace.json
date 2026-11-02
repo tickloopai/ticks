@@ -11,19 +11,19 @@
       "description": "Futu OpenD option chains, option pricing and implied volatility",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-aarch64-apple-darwin.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-aarch64-apple-darwin.tar.gz",
           "sha256": "62dd93a4ca5ff9c4c6fa51bee265f46e0b9973b13d02dfe9dfa27c1d4ac7473c"
         },
         "x86_64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-x86_64-apple-darwin.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-x86_64-apple-darwin.tar.gz",
           "sha256": "109d427fd682e2cb347c0c3f8d9a2658fa1df52df8dafcd8a437081ab0a3a9ad"
         },
         "aarch64-unknown-linux-musl": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-aarch64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-aarch64-unknown-linux-musl.tar.gz",
           "sha256": "64de95369af5bc25b371974adc134731beb96ade2033b8ee2d219652f8c8652d"
         },
         "x86_64-unknown-linux-musl": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-x86_64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-x86_64-unknown-linux-musl.tar.gz",
           "sha256": "3332331d472f3e903fe072604fe7cf87dc29b48dc3881e12c93fa4e2953d20dc"
         }
       }
@@ -34,19 +34,19 @@
       "description": "Longbridge quotes, watchlist, kline, positions, news, earnings and community posts",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-aarch64-apple-darwin.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-aarch64-apple-darwin.tar.gz",
           "sha256": "d7d78b77e8237245e6f60630154b2f73b4b2fad3fefd089b2e414d19de6c4676"
         },
         "x86_64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-x86_64-apple-darwin.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-x86_64-apple-darwin.tar.gz",
           "sha256": "d6788a2da4287dc36fc0b82f4317acfa5bcb78f30c6477152b45d90f21c35b6d"
         },
         "aarch64-unknown-linux-musl": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-aarch64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-aarch64-unknown-linux-musl.tar.gz",
           "sha256": "dad3d1f21d59e86a7e06922a8efeb0a1ac54b8f1d69e496275be5dad64a8d484"
         },
         "x86_64-unknown-linux-musl": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-x86_64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/longbridge-v0.2.10/tick-longbridge-0.2.10-x86_64-unknown-linux-musl.tar.gz",
           "sha256": "0bfb6067d94d3cdd95104f02533f0bc8afcc045c7ac0d53a238844932b7d4205"
         }
       }
@@ -57,19 +57,19 @@
       "description": "Official Tickloop Ticks: the Reader for original financial documents from URLs or local files",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.6/tick-tickloop-0.1.6-aarch64-apple-darwin.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/tickloop-v0.1.6/tick-tickloop-0.1.6-aarch64-apple-darwin.tar.gz",
           "sha256": "884845b21113168dd30959c8a804da5faa460b0225aae967bb2ed7d8cf9b5d8e"
         },
         "x86_64-apple-darwin": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.6/tick-tickloop-0.1.6-x86_64-apple-darwin.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/tickloop-v0.1.6/tick-tickloop-0.1.6-x86_64-apple-darwin.tar.gz",
           "sha256": "fef6daf7dfa2bc9cbe09236eac5cefb88fbeea7787f6787efc8c2750889a6f8f"
         },
         "aarch64-unknown-linux-musl": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.6/tick-tickloop-0.1.6-aarch64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/tickloop-v0.1.6/tick-tickloop-0.1.6-aarch64-unknown-linux-musl.tar.gz",
           "sha256": "14161b0cd4054d1923bdea9f517e2f9a546d830b04424762c54d2443f834e6d7"
         },
         "x86_64-unknown-linux-musl": {
-          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.6/tick-tickloop-0.1.6-x86_64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/longbridge/ticks/releases/download/tickloop-v0.1.6/tick-tickloop-0.1.6-x86_64-unknown-linux-musl.tar.gz",
           "sha256": "c68d5e4d180f8c09d179f7a962b4a5198a7f1e9d5637be0f7356e99306ec3e71"
         }
       }

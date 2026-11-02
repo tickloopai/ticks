@@ -1,6 +1,6 @@
 # Tickloop Ticks
 
-Terms specific to this repository. Shared terms (Tick, Tick Instance, Tick Package, Tick Marketplace, Extension Tick and others) are defined in Tickloop's [CONTEXT.md](https://github.com/tickloopai/tickloop/blob/main/CONTEXT.md), which wins on any overlap. Behavior lives in [AGENTS.md](./AGENTS.md) and the source.
+Terms specific to this repository. Shared terms (Tick, Tick Instance, Tick Package, Tick Marketplace, Extension Tick and others) are defined in Tickloop's [CONTEXT.md](https://github.com/longbridge/tickloop/blob/main/CONTEXT.md), which wins on any overlap. Behavior lives in [AGENTS.md](./AGENTS.md) and the source.
 
 ## Language
 
