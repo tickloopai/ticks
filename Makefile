@@ -1,5 +1,8 @@
 .DEFAULT_GOAL := build
 
+# longbridge/tickloop is private; the git CLI fetches it with the user's Git credentials.
+export CARGO_NET_GIT_FETCH_WITH_CLI := true
+
 TICK_PACKAGES ?= $(notdir $(patsubst %/tick-package.json,%,$(wildcard packages/*/tick-package.json)))
 TICKLOOP ?= tickloop
 # The config root Tickloop's own `make dev` runs with, so the packages installed here are the ones

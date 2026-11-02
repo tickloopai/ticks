@@ -115,7 +115,7 @@ If a stage fails, fix the cause and re-run the failed jobs; do not release again
 
 A new target is added in `targets` of `scripts/release-ticks.sh`, the build matrix of `release-ticks.yml` and `host_target` of `scripts/package-ticks.sh`.
 
-Repository settings: the publish job writes with the workflow's own `GITHUB_TOKEN` (it requests `contents: write`), so no secret is needed; if the default branch is protected, let `github-actions[bot]` push to it. The publish job runs in the `tick-marketplace` environment, where you can require reviewers. The build needs `longbridge/tickloop` to be public to fetch the Tick crates.
+Repository settings: the publish job writes with the workflow's own `GITHUB_TOKEN` (it requests `contents: write`), so no secret is needed; if the default branch is protected, let `github-actions[bot]` push to it. The publish job runs in the `tick-marketplace` environment, where you can require reviewers. `longbridge/tickloop` is private, so the workflows fetch the Tick crates with the `TICKLOOP_TOKEN` repository secret, a token that can read it; locally, the Makefile sets `CARGO_NET_GIT_FETCH_WITH_CLI=true` so Cargo uses your Git credentials (plain `cargo` commands need it set too).
 
 ## License
 

@@ -17,12 +17,16 @@ env:
   CARGO_TERM_COLOR: never
   RELEASE_TAG: ${{ github.ref_name }}
   RELEASE_COMMIT: ${{ github.sha }}
+  # longbridge/tickloop is private: Cargo fetches it through the git CLI with the TICKLOOP_TOKEN secret.
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.TICKLOOP_TOKEN }}@github.com/longbridge/tickloop.insteadOf
+  GIT_CONFIG_VALUE_0: https://github.com/longbridge/tickloop
 
 # Each stage is its own job, and each target its own build, so a failed one can be re-run alone ("Re-run failed jobs")
 # without repeating the stages that already passed. A repeated publish keeps the releases an
 # earlier attempt created, as long as they carry the same archives. Releases reuse the pushed
 # <package>-vX.Y.Z tag; the marketplace update is a commit to the default branch.
-# The build fetches the Tickloop crates from longbridge/tickloop, which must be public.
 jobs:
   check:
     name: Check the tag and release scripts
@@ -60,6 +64,7 @@ jobs:
     name: CI
     needs: check
     uses: ./.github/workflows/ci.yml
+    secrets: inherit
 
   # One archive per target, each built and run on a machine of its own architecture: Linux on
   # native runners (static musl, as the Linux Tickloop is), Intel macOS under Rosetta. Publishing
