@@ -7,24 +7,24 @@
   "packages": [
     {
       "name": "futu",
-      "version": "0.2.10",
+      "version": "0.2.11",
       "description": "Futu OpenD option chains, option pricing and implied volatility",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-aarch64-apple-darwin.tar.gz",
-          "sha256": "62dd93a4ca5ff9c4c6fa51bee265f46e0b9973b13d02dfe9dfa27c1d4ac7473c"
+          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.11/tick-futu-0.2.11-aarch64-apple-darwin.tar.gz",
+          "sha256": "814de967e4abdefcaee59c6df701739619dfc1dddd26398fe1fd735e23daa2a0"
         },
         "x86_64-apple-darwin": {
-          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-x86_64-apple-darwin.tar.gz",
-          "sha256": "109d427fd682e2cb347c0c3f8d9a2658fa1df52df8dafcd8a437081ab0a3a9ad"
+          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.11/tick-futu-0.2.11-x86_64-apple-darwin.tar.gz",
+          "sha256": "815223bd9c2db53e8095f2f568bff0e89176c45e497ab63b07026d0587dc1490"
         },
         "aarch64-unknown-linux-musl": {
-          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-aarch64-unknown-linux-musl.tar.gz",
-          "sha256": "64de95369af5bc25b371974adc134731beb96ade2033b8ee2d219652f8c8652d"
+          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.11/tick-futu-0.2.11-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "1f1de6edab72f645f605a8c6d19398da0fc95c43b1649d5fdde578c995835882"
         },
         "x86_64-unknown-linux-musl": {
-          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.10/tick-futu-0.2.10-x86_64-unknown-linux-musl.tar.gz",
-          "sha256": "3332331d472f3e903fe072604fe7cf87dc29b48dc3881e12c93fa4e2953d20dc"
+          "url": "https://github.com/longbridge/ticks/releases/download/futu-v0.2.11/tick-futu-0.2.11-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "fe3bb7386a6585128f48f45126487a0cbfbde4a92267347442b6b67775457ffd"
         }
       }
     },
