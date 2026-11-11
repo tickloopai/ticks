@@ -8,6 +8,26 @@ Terms specific to this repository. Shared terms (Tick, Tick Instance, Tick Packa
 One of the nine Ticks in `market/views` (`TickKind`: quote, watchlist, kline, positions, news, earnings, options, reader, community), run by a package program.
 _Avoid_: calling a Financial Tick a package, or a package a Tick
 
+**Browser Tick**:
+The Tick `tick-browser browser` runs (`packages/browser`), one for each Tick Instance that opens it: it serves the tools of the Tickloop browser extension, which it does not define itself, and shows the tabs of its Browser Session. Like every Tick here it is an Extension Tick in Tickloop's terms, but it is not a Financial Tick and has no Provider.
+_Avoid_: browser extension, or extension alone, for the Tick
+
+**Native Host**:
+`tick-browser` as Chrome starts it for the extension (`chrome-extension://<id>/` as its first argument), the native messaging host `ai.tickloop.browser`. It serves the local socket the Browser Ticks connect to, one browser at a time, and routes between the extension and each Browser Session.
+_Avoid_: host, alone, which in Tickloop means the program that hosts a Tick Instance
+
+**Browser Session**:
+One Browser Tick's share of the browser, named by its Tick Instance identity: its own tab group, state, pending approvals and calls in the extension, opened when the Tick connects to the Native Host and closed when it goes. Several are open at once in one browser.
+_Avoid_: Chat, or session alone where Tickloop's own sessions could be meant
+
+**Relay Protocol**:
+The messages between the extension and the Native Host (`hello`, `update`, `result`, `welcome`, `refused`, `session_opened`, `session_closed`, `call`, `stop`) and between the Native Host and each Browser Tick (`open`, `hello`, `update`, `result`, `refused`, `call`, `stop`), with their own version, specified in `packages/browser/PROTOCOL.md`.
+_Avoid_: Tick protocol, which is the one between a Tick and its host
+
+**Extension Catalog**:
+The tool list the extension sends in `hello`, which every Browser Tick offers as its own catalog, with the same revision, while it is connected; before that a Tick offers only `status`.
+_Avoid_: hard-coding extension tool names in the Tick
+
 **Tick Command**:
 A package program's subcommand that runs one Financial Tick; what every Tick Command shares lives in `market/command`.
 _Avoid_: tool, for a subcommand

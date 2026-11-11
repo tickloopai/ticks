@@ -12,8 +12,8 @@ The official Tick marketplace for Tickloop and the source of its Tick packages. 
 
 ## Core behavior
 
-- **Program shape**: each package's `main.rs` hands a clap `Cli` to `tick_command::entry::run`. A Tick subcommand builds provider implementations into `entry::Services` and calls `entry::run_tick`; rendering lives in `market/views`, the Tick protocol in the Tickloop crates. `describe` prints Tick descriptors. `--once` and `describe` are refused inside a Tickloop instance (`entry::refuse_in_instance`).
-- **Hosted startup**: when hosted (`entry::in_instance()`), a program runs only offline checks before `connecting::run_hosted` answers the host; network work and connecting to the data source happen afterwards.
+- **Program shape**: each package's `main.rs` hands a clap `Cli` to `tick_command::entry::run`. A Tick subcommand builds provider implementations into `entry::Services` and calls `entry::run_tick`; rendering lives in `market/views`, the Tick protocol in the Tickloop crates. `describe` prints Tick descriptors. `--once` and `describe` are refused inside a Tickloop instance (`entry::refuse_in_instance`). Exception: `packages/browser` reads no Provider and runs its own loop instead of `entry::run_tick` (`src/tick.rs`), and its `main.rs` runs the Native Host before clap when the first argument is `chrome-extension://…`.
+- **Hosted startup**: when hosted (`entry::in_instance()`), a program runs only offline checks before `connecting::run_hosted` answers the host; network work and connecting to the data source happen afterwards. Exception: the Browser Tick answers its host itself rather than through `connecting::run_hosted`, and before that writes the native messaging host manifest into the user data directories of the browsers the user has (`src/registration.rs`), local file work; it connects to the Native Host's local socket afterwards and keeps trying while no browser serves.
 - **Package Skills** (`packages/<name>/skills/*/SKILL.md`) ship to the Agent with the package and are product content. They open the installed program by name, leave logging in to Tickloop, and name only tools the Tickloop Agent offers; `tests/package_skill.rs` checks this against `AGENT_TOOLS`, which must be kept in sync with tickloop's agent runtime.
 
 ## Permissions and credentials
@@ -34,6 +34,7 @@ The official Tick marketplace for Tickloop and the source of its Tick packages. 
 | `packages/longbridge/` | `tickloop-tick-longbridge` | `tick-longbridge`: `entry.rs` dispatch, `sdk.rs` SDK adapter, `news_api.rs`/`community_api.rs` for HTTP endpoints the SDK lacks, `rate_limit.rs`, `auth/` + `login.rs` + `region.rs` OAuth device flow, `probe.rs` (`probe-fundamentals`; `build.rs` embeds the locked SDK revision) |
 | `packages/futu/` | `tickloop-tick-futu` | `tick-futu`: a hand-written client for Futu OpenD's JSON protocol over TCP, implementing `OptionsApi` |
 | `packages/tickloop/` | `tickloop-tick-tickloop` | `tick-tickloop`: official Tickloop Ticks as subcommands (`reader` today) |
+| `packages/browser/` | `tickloop-tick-browser` | `tick-browser`: the Browser Tick (`browser`), whose tools come from the Tickloop browser extension, and the native messaging host Chrome starts (`chrome-extension://…` as its first argument); the relay between them is in `PROTOCOL.md`. Uses only the domain-agnostic parts of `market/` (entry, terminal, frame helpers) |
 | `tests/package_skill.rs` | — | Skill checks included into every package's test binary |
 | `vendor/` | — | Patched third-party crates (`dotenv`, `longbridge-oauth`), each with a README |
 

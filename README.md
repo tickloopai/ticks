@@ -20,6 +20,28 @@ Installing a package opens nothing and grants no market, account or trading acce
 
 After installing, ask the Agent in plain words, for example "show me Tesla's K-line" or "open my positions". The Agent opens the right Tick for you.
 
+## The browser package
+
+`browser` lets the Agent read and operate web pages in your own Chrome, Chromium or Edge, signed in as you, through the Tickloop browser extension (until it is in the Chrome Web Store, load its development build unpacked in `chrome://extensions`, in Developer mode); it only uses the tabs in the Agent's own tab group, one group for each session that opens it, so several sessions use the browser at once. It needs no login, and installing it runs nothing. When the Agent first opens the Browser Tick, the Tick registers itself as the native messaging host `ai.tickloop.browser` with each of these browsers you have, by writing `ai.tickloop.browser.json` into its `NativeMessagingHosts` directory:
+
+| Browser | macOS (under `~/Library/Application Support/`) | Linux (under `~/.config/`) |
+| --- | --- | --- |
+| Google Chrome | `Google/Chrome/NativeMessagingHosts/` | `google-chrome/NativeMessagingHosts/` |
+| Chromium | `Chromium/NativeMessagingHosts/` | `chromium/NativeMessagingHosts/` |
+| Microsoft Edge | `Microsoft Edge/NativeMessagingHosts/` | `microsoft-edge/NativeMessagingHosts/` |
+
+```json
+{
+  "name": "ai.tickloop.browser",
+  "description": "Tickloop Browser Tick relay",
+  "path": "/absolute/path/to/the/installed/tick-browser",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://phamnhcllaeigpghejaebpihbmfnbcln/"]
+}
+```
+
+Only the Tickloop extension may start it. It is rewritten when the package moves or when another Tickloop installation's Browser Tick opened last, and the Tick's card says when it wrote or replaced one; you can delete it to undo the registration. `tick-browser status` shows where it is registered and whether a browser is serving Tickloop. Of two browsers with the extension, such as Chrome and Edge, the one opened first serves; the other takes over when the first closes. How the Tick, the host and the extension talk is in [packages/browser/PROTOCOL.md](packages/browser/PROTOCOL.md).
+
 ## Packages
 
 Install one with `tickloop tick install <package>`.

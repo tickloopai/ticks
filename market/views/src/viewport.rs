@@ -35,6 +35,36 @@ impl<B> KeyBubbling for ViewportBackend<B> {
     }
 }
 
+/// Tells Tickloop how many rows a hosted Tick's content needs now, so its card grows and shrinks
+/// with it within the Tick's declared `screen.min_rows` and `screen.max_rows`:
+/// `ESC ] 7777 ; tickloop ; rows=<n> BEL` on the Tick's terminal. A host that does not know it
+/// drops it, and the card keeps the size it has.
+pub trait CardRows {
+    /// Tells the host the Tick wants `rows` rows; nothing when no host listens.
+    fn want_rows(&mut self, rows: u16) -> std::io::Result<()> {
+        let _ = rows;
+        Ok(())
+    }
+}
+
+pub fn wanted_rows(rows: u16) -> String {
+    format!("\x1b]7777;tickloop;rows={rows}\x07")
+}
+
+impl CardRows for ratatui::backend::TestBackend {}
+
+impl<B> CardRows for ViewportBackend<B> {
+    fn want_rows(&mut self, rows: u16) -> std::io::Result<()> {
+        use std::io::Write;
+        // Only a hosted Tick draws on a terminal of its own, which a host reads.
+        let Some(tty) = &mut self.tty else {
+            return Ok(());
+        };
+        tty.write_all(wanted_rows(rows).as_bytes())?;
+        tty.flush()
+    }
+}
+
 pub struct ViewportBackend<B> {
     inner: B,
     maximum: Option<Size>,

@@ -1,0 +1,38 @@
+[package]
+name = "tickloop-tick-browser"
+description = "The Browser Tick: the Agent's tabs in the user's own Chrome, Chromium or Edge through the Tickloop browser extension, and tick-browser, which serves it and relays native messaging for the extension"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "tick_browser"
+doctest = false
+
+[[bin]]
+name = "tick-browser"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
+futures-util = "0.3"
+libc = "0.2"
+ratatui = { version = "0.30", features = ["unstable-rendered-line-info"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+tickloop-tick-command.workspace = true
+tickloop-tick-market.workspace = true
+tickloop-tick-protocol.workspace = true
+tickloop-tick-provider.workspace = true
+tickloop-tick-sdk.workspace = true
+tickloop-ui.workspace = true
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+
+[dev-dependencies]
+tempfile = "3"
+tickloop-tick-packages.workspace = true
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util"] }

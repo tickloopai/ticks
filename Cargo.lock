@@ -3751,6 +3751,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "tickloop-tick-browser"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "crossterm",
+ "futures-util",
+ "libc",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "sha1",
+ "tempfile",
+ "tickloop-tick-command",
+ "tickloop-tick-market",
+ "tickloop-tick-packages",
+ "tickloop-tick-protocol",
+ "tickloop-tick-provider",
+ "tickloop-tick-sdk",
+ "tickloop-ui",
+ "tokio",
+]
+
+[[package]]
 name = "tickloop-tick-command"
 version = "0.1.0"
 dependencies = [
