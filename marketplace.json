@@ -6,6 +6,29 @@
   },
   "packages": [
     {
+      "name": "browser",
+      "version": "0.1.1",
+      "description": "The Agent's tabs in your own Chrome, Chromium or Edge through the Tickloop browser extension",
+      "downloads": {
+        "aarch64-apple-darwin": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/browser-v0.1.1/tick-browser-0.1.1-aarch64-apple-darwin.tar.gz",
+          "sha256": "253894041080205af5397f2d6eef45898f80cc61b55fa90f68675698cb26e46b"
+        },
+        "x86_64-apple-darwin": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/browser-v0.1.1/tick-browser-0.1.1-x86_64-apple-darwin.tar.gz",
+          "sha256": "14f64c7d9e367e4b47ecad30805757dbe3eeca8ed5320b55e3a12b7168d01e39"
+        },
+        "aarch64-unknown-linux-musl": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/browser-v0.1.1/tick-browser-0.1.1-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "0241f1b1f74ab0a954eba1bac882c8700716ee97904cba7c6e61176404240640"
+        },
+        "x86_64-unknown-linux-musl": {
+          "url": "https://github.com/tickloopai/ticks/releases/download/browser-v0.1.1/tick-browser-0.1.1-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "c42a85635810e4848e318a1453a609de906fb30dd80e24dc5b2cc19e1f9734d5"
+        }
+      }
+    },
+    {
       "name": "futu",
       "version": "0.2.11",
       "description": "Futu OpenD option chains, option pricing and implied volatility",
