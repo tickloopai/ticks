@@ -76,24 +76,24 @@
     },
     {
       "name": "tickloop",
-      "version": "0.1.7",
+      "version": "0.1.9",
       "description": "Official Tickloop Ticks: the Reader for original financial documents from URLs or local files",
       "downloads": {
         "aarch64-apple-darwin": {
-          "url": "https://github.com/longbridge/ticks/releases/download/tickloop-v0.1.7/tick-tickloop-0.1.7-aarch64-apple-darwin.tar.gz",
-          "sha256": "b09818fcf062b6498008638903c92d72aa604aded4c2b18a17fb07e5b96114c1"
+          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.9/tick-tickloop-0.1.9-aarch64-apple-darwin.tar.gz",
+          "sha256": "4e4ae240de557731acddaf4fb43a7df7042055857747421726cb0565da430b51"
         },
         "x86_64-apple-darwin": {
-          "url": "https://github.com/longbridge/ticks/releases/download/tickloop-v0.1.7/tick-tickloop-0.1.7-x86_64-apple-darwin.tar.gz",
-          "sha256": "d8c84e1e35c26ae53a4d41670c1043789f33d86ac4d458ddfb85dd0728d307a1"
+          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.9/tick-tickloop-0.1.9-x86_64-apple-darwin.tar.gz",
+          "sha256": "abb67f1c5fab3e4fabfbe96c58013ed0fffdc49a1cec78635d7276153a47c680"
         },
         "aarch64-unknown-linux-musl": {
-          "url": "https://github.com/longbridge/ticks/releases/download/tickloop-v0.1.7/tick-tickloop-0.1.7-aarch64-unknown-linux-musl.tar.gz",
-          "sha256": "451f7fb80b9ff10cc2740077f1e55a049b86d762cf5f70d62fc1a8be3eee1d75"
+          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.9/tick-tickloop-0.1.9-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "9f8538d3f300706aab720c1b8a3f6574e6aaab9b886b46dcf024b789e0ab242b"
         },
         "x86_64-unknown-linux-musl": {
-          "url": "https://github.com/longbridge/ticks/releases/download/tickloop-v0.1.7/tick-tickloop-0.1.7-x86_64-unknown-linux-musl.tar.gz",
-          "sha256": "122f794317b3239282cfae7e48a0ecf289e5db39016c601c698bafaf9f8b44b4"
+          "url": "https://github.com/tickloopai/ticks/releases/download/tickloop-v0.1.9/tick-tickloop-0.1.9-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "300f3f02b097467ccad0d474483ba91a4d95b3f5352ac7e625ae629dadb28469"
         }
       }
     }
