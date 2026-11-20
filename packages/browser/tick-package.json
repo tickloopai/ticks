@@ -1,6 +1,6 @@
 {
   "name": "browser",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The Agent's tabs in your own Chrome, Chromium or Edge through the Tickloop browser extension",
   "executable": "bin/tick-browser",
   "protocol": true,
