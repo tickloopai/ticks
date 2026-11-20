@@ -96,6 +96,8 @@ make release REMOTE=1                          # the same, but GitHub Actions ch
 node scripts/release.mjs --check               # preview; changes nothing
 ```
 
+`make release-public` releases the same way to the public repository `tickloopai/ticks` (`PUBLIC_REPOSITORY`) through this checkout's remote `tickloopai` (`PUBLIC_REMOTE`; add it with `git remote add tickloopai git@github.com:tickloopai/ticks.git`): the version commit, tags, Releases and marketplace update go there, and its `marketplace.json` lists that repository's downloads. It always builds and publishes locally, as that repository has no release runners, and takes `TICK_PACKAGES` and `VERSION` like `make release`; `make release-public CHECK=1` previews. Underneath, `TICKS_RELEASE_REPOSITORY` and `TICKS_RELEASE_REMOTE` select the repository and remote for every release script.
+
 Each release is one `<package>-v<version>` tag carrying `tick-<package>-<version>-<target>.tar.gz` for all four targets. Versions come from each package's `Cargo.toml`, kept in step with its `tick-package.json` and `Cargo.lock`, independently of other packages and of Tickloop. A version must be newer than the package's existing tags and its `marketplace.json` entry.
 
 The release runs from the committed `HEAD` of a branch that includes `origin`'s commits (pull first: releases commit marketplace updates there); other working-tree changes are left alone. In a temporary checkout it bumps the selected versions and runs `cargo check`, then commits the version files as one `chore(release): …`, creates one tag per package on that commit, and pushes the branch and tags atomically, at most three tags per push.

@@ -8,7 +8,10 @@
 set -eu
 
 targets="aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl"
-repository=longbridge/ticks
+# TICKS_RELEASE_REPOSITORY and TICKS_RELEASE_REMOTE release to another repository through another
+# remote of the marketplace checkout, as `make release-public` does.
+repository=${TICKS_RELEASE_REPOSITORY:-longbridge/ticks}
+release_remote=${TICKS_RELEASE_REMOTE:-origin}
 release_downloads=https://github.com/$repository/releases/download
 test_support_crate=tickloop-tick-test-support
 download_attempts=6
@@ -333,7 +336,7 @@ EOF
         git -C "$checkout" add marketplace.json README.md
         git -C "$checkout" commit --quiet \
             -m "feat: release $released" -m "Built from $source@$commit ($tag)."
-        git -C "$checkout" push --quiet origin "HEAD:refs/heads/$branch"
+        git -C "$checkout" push --quiet "$release_remote" "HEAD:refs/heads/$branch"
         echo "Pushed the marketplace update ($(git -C "$checkout" rev-parse --short HEAD))."
     fi
     summarize "- marketplace.json lists $released."

@@ -170,7 +170,7 @@ jobs:
       contents: write
     environment:
       name: tick-marketplace
-      url: https://github.com/longbridge/ticks
+      url: ${{ github.server_url }}/${{ github.repository }}
     steps:
       - name: Check out the tagged source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

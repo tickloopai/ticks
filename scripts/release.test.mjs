@@ -9,7 +9,7 @@ import { nextVersion, readProducts, versionChanges } from "./release-versions.mj
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const releaseScript = join(scriptDirectory, "release.mjs");
-const expectedRepository = readFileSync(releaseScript, "utf8").match(/^const expectedRepository = "([^"]+)";$/m)[1];
+const expectedRepository = readFileSync(releaseScript, "utf8").match(/^const defaultRepository = "([^"]+)";$/m)[1];
 const realGit = spawnSync("which", ["git"], { encoding: "utf8" }).stdout.trim();
 const shellQuote = text => `'${text.replaceAll("'", "'\\''")}'`;
 
@@ -36,7 +36,7 @@ function fixture(t, { packages = { longbridge: "0.2.0", futu: "0.4.0" }, marketp
   const repo = join(base, "repo"), remote = join(base, "remote.git"), bin = join(base, "bin");
   mkdirSync(repo); mkdirSync(bin);
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", RELEASE_TEST_REPO: repo, RELEASE_TEST_REMOTE: remote, RELEASE_TEST_LOG: join(base, "checks.log"), RELEASE_TEST_PUSH_LOG: join(base, "push.log") };
-  for (const name of ["VERSION", "TICK_PACKAGES", "CARGO_TARGET_DIR", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) delete env[name];
+  for (const name of ["VERSION", "TICK_PACKAGES", "TICKS_RELEASE_REPOSITORY", "TICKS_RELEASE_REMOTE", "CARGO_TARGET_DIR", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) delete env[name];
   const setup = { repo, remote, base, env };
   const ssh = join(base, "ssh.sh");
   writeFileSync(ssh, '#!/bin/sh\ncase "$*" in\n*git-upload-pack*) [ "$RELEASE_TEST_REJECT_READ" != 1 ] || exit 1; exec git-upload-pack "$RELEASE_TEST_REMOTE" ;;\n*git-receive-pack*) [ "$RELEASE_TEST_REJECT_PUSH" != 1 ] || exit 1; exec git-receive-pack "$RELEASE_TEST_REMOTE" ;;\nesac\nexit 1\n');
@@ -222,6 +222,21 @@ test("rejects detached HEAD, unknown arguments, bad selections and unexpected de
   git(["checkout", "--detach", "-q"], setup); assert.match(release(setup).stderr, /detached HEAD/);
   git(["checkout", "-q", "main"], setup); git(["remote", "set-url", "--push", "origin", "git@github.com:someone/other.git"], setup);
   assert.match(release(setup).stderr, /exactly one fetch and one push/);
+});
+
+test("TICKS_RELEASE_REPOSITORY and TICKS_RELEASE_REMOTE release through another remote, checked against that repository", t => {
+  const setup = fixture(t);
+  git(["remote", "set-url", "origin", "git@github.com:someone/other.git"], setup);
+  git(["remote", "add", "public", "git@github.com:example/ticks.git"], setup);
+  const env = { TICKS_RELEASE_REPOSITORY: "example/ticks", TICKS_RELEASE_REMOTE: "public", TICK_PACKAGES: "longbridge" };
+  assert.match(release(setup, undefined, { ...env, TICKS_RELEASE_REPOSITORY: "elsewhere/ticks" }).stderr, /public must have exactly one fetch and one push URL for github\.com\/elsewhere\/ticks/);
+  assert.match(release(setup, undefined, { ...env, TICKS_RELEASE_REMOTE: "--upload-pack=x" }).stderr, /TICKS_RELEASE_REMOTE must be a remote name/);
+  assert.match(release(setup, undefined, { ...env, TICKS_RELEASE_REPOSITORY: "example" }).stderr, /TICKS_RELEASE_REPOSITORY must be <owner>\/<name>/);
+  assert.equal(git(["tag", "--list"], setup), "");
+  const result = release(setup, undefined, env); assert.equal(result.status, 0, result.stderr);
+  const commit = git(["rev-parse", "HEAD"], setup);
+  assert.equal(git(["ls-remote", "public", "refs/tags/longbridge-v0.2.1^{}"], setup), `${commit}\trefs/tags/longbridge-v0.2.1^{}`);
+  assert.match(readFileSync(setup.env.RELEASE_TEST_PUSH_LOG, "utf8"), /^push --porcelain --atomic public /m);
 });
 
 test("requires its workflow, marketplace.json and consistent version mirrors in the committed snapshot", t => {

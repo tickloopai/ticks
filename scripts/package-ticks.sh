@@ -12,7 +12,7 @@
 # signs only arm64 ones by itself.
 set -eu
 
-release_downloads=https://github.com/longbridge/ticks/releases/download
+release_downloads=https://github.com/${TICKS_RELEASE_REPOSITORY:-longbridge/ticks}/releases/download
 # The license, the third-party notices and the license copies they name, which every package carries.
 license_notices="LICENSE THIRD_PARTY_NOTICES.md licenses vendor/longbridge-oauth/LICENSE-MIT
 vendor/longbridge-oauth/LICENSE-APACHE vendor/longbridge-oauth/README.md"

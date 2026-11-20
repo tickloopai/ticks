@@ -54,7 +54,7 @@ if (path.basename(process.argv[1]) === 'curl') {
 `;
   for (const program of ["gh", "curl"]) { writeFileSync(join(bin, program), mock); chmodSync(join(bin, program), 0o700); }
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", RELEASE_TAG: "longbridge-v0.2.1", RELEASE_COMMIT: "a".repeat(40), GITHUB_REPOSITORY: "longbridge/ticks", RELEASE_TEST_STORE: releases, RELEASE_TEST_CALLS: join(root, "calls.log") };
-  delete env.GITHUB_STEP_SUMMARY; delete env.GIT_DIR; delete env.GIT_WORK_TREE; delete env.GIT_INDEX_FILE;
+  delete env.GITHUB_STEP_SUMMARY; delete env.TICKS_RELEASE_REPOSITORY; delete env.TICKS_RELEASE_REMOTE; delete env.GIT_DIR; delete env.GIT_WORK_TREE; delete env.GIT_INDEX_FILE;
   const setup = { root, market, archives, archiveName, archiveNames, releases, originalFutu, env };
   git(["init", "--bare", "-q", remote], setup); git(["init", "-q", "-b", "main"], setup);
   git(["config", "user.name", "Release Test"], setup); git(["config", "user.email", "release@example.invalid"], setup);
@@ -84,6 +84,20 @@ test("a package tag publishes and verifies only that package at its own version,
   assert.equal(git(["rev-parse", "HEAD"], setup), commit);
   result = release(setup, "verify", setup.archives); assert.equal(result.status, 0, result.stderr);
   assert.ok(!readFileSync(setup.env.RELEASE_TEST_CALLS, "utf8").includes("futu-v"));
+});
+
+test("TICKS_RELEASE_REPOSITORY publishes to that repository and lists its downloads, pushing through TICKS_RELEASE_REMOTE", t => {
+  const setup = fixture(t);
+  git(["remote", "rename", "origin", "public"], setup);
+  Object.assign(setup.env, { TICKS_RELEASE_REPOSITORY: "tickloopai/ticks", TICKS_RELEASE_REMOTE: "public" });
+  const result = release(setup, "publish", setup.market, setup.archives); assert.equal(result.status, 0, result.stderr);
+  const downloads = JSON.parse(readFileSync(join(setup.market, "marketplace.json"))).packages.find(p => p.name === "longbridge").downloads;
+  for (const target of targets) assert.equal(downloads[target].url, `https://github.com/tickloopai/ticks/releases/download/longbridge-v0.2.1/tick-longbridge-0.2.1-${target}.tar.gz`);
+  const calls = readFileSync(setup.env.RELEASE_TEST_CALLS, "utf8");
+  assert.match(calls, /^gh release create longbridge-v0\.2\.1 --repo tickloopai\/ticks --verify-tag /m);
+  assert.ok(!calls.includes("--repo longbridge/ticks"));
+  assert.equal(git(["ls-remote", "public", "refs/heads/main"], setup).split("\t")[0], git(["rev-parse", "HEAD"], setup));
+  assert.equal(release(setup, "verify", setup.archives).status, 0);
 });
 
 test("an existing release with different bytes is rejected without changing the marketplace", t => {

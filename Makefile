@@ -5,12 +5,15 @@ export CARGO_NET_GIT_FETCH_WITH_CLI := true
 
 TICK_PACKAGES ?= $(notdir $(patsubst %/tick-package.json,%,$(wildcard packages/*/tick-package.json)))
 TICKLOOP ?= tickloop
+# The public repository `make release-public` releases to, and the remote of this checkout that points at it.
+PUBLIC_REPOSITORY ?= tickloopai/ticks
+PUBLIC_REMOTE ?= tickloopai
 # The config root Tickloop's own `make dev` runs with, so the packages installed here are the ones
 # a development Tickloop opens.
 TICKLOOP_DEV_CONFIG_DIR ?= $(HOME)/.tickloop-dev
 HOST_TARGET := $(shell scripts/package-ticks.sh --host-target)
 
-.PHONY: build test check package-ticks dev-ticks release
+.PHONY: build test check package-ticks dev-ticks release release-public
 
 build:
 	cargo build --locked --workspace --bins
@@ -52,3 +55,11 @@ dev-ticks:
 ## Select with TICK_PACKAGES="longbridge futu"; preview with: node scripts/release.mjs --check
 release:
 	@node scripts/release.mjs $(if $(filter 1,$(REMOTE)),--remote,--local)
+
+## Release like `make release`, but to PUBLIC_REPOSITORY (default tickloopai/ticks) through the
+## PUBLIC_REMOTE remote (default tickloopai): the version commit, tags and marketplace update go there,
+## and its marketplace.json lists that repository's downloads. Always built and published from this
+## Mac, as the public repository has no release runners. CHECK=1 previews and changes nothing.
+release-public:
+	@TICKS_RELEASE_REPOSITORY=$(PUBLIC_REPOSITORY) TICKS_RELEASE_REMOTE=$(PUBLIC_REMOTE) \
+		node scripts/release.mjs --local $(if $(filter 1,$(CHECK)),--check)

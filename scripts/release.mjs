@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compareVersions, nextVersion, readProducts, versionChanges } from "./release-versions.mjs";
 
-const expectedRepository = "longbridge/ticks";
+// TICKS_RELEASE_REPOSITORY and TICKS_RELEASE_REMOTE release to another GitHub repository through
+// another remote, such as `make release-public`.
+const defaultRepository = "longbridge/ticks";
+const expectedRepository = process.env.TICKS_RELEASE_REPOSITORY || defaultRepository;
+const releaseRemote = process.env.TICKS_RELEASE_REMOTE || "origin";
 const allowedRemoteUrls = new Set([
   `git@github.com:${expectedRepository}`, `git@github.com:${expectedRepository}.git`,
   `ssh://git@github.com/${expectedRepository}`, `ssh://git@github.com/${expectedRepository}.git`,
@@ -87,6 +91,11 @@ function releaseSnapshotIsCurrent(state) {
   return current.commit === state.commit;
 }
 
+function assertReleaseSettings() {
+  if (!/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(expectedRepository)) throw new Error(`TICKS_RELEASE_REPOSITORY must be <owner>/<name>, not ${expectedRepository}.`);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(releaseRemote)) throw new Error(`TICKS_RELEASE_REMOTE must be a remote name, not ${releaseRemote}.`);
+}
+
 function preflight() {
   const commit = gitOutput(["rev-parse", "--verify", "HEAD^{commit}"], "HEAD must be a committed snapshot.");
   const branch = gitOutput(["symbolic-ref", "--quiet", "HEAD"], "Release requires a branch; detached HEAD cannot receive a version commit.");
@@ -95,9 +104,9 @@ function preflight() {
     const path = gitOutput(["rev-parse", "--git-path", state], "Could not inspect Git operation state.");
     if (existsSync(path)) throw new Error("Finish the active Git operation before releasing.");
   }
-  for (const args of [["remote", "get-url", "--all", "origin"], ["remote", "get-url", "--push", "--all", "origin"]]) {
-    const urls = gitOutput(args, "The origin remote must be configured.").split("\n");
-    if (urls.length !== 1 || !allowedRemoteUrls.has(urls[0])) throw new Error(`origin must have exactly one fetch and one push URL for github.com/${expectedRepository}.`);
+  for (const args of [["remote", "get-url", "--all", releaseRemote], ["remote", "get-url", "--push", "--all", releaseRemote]]) {
+    const urls = gitOutput(args, `The ${releaseRemote} remote must be configured.`).split("\n");
+    if (urls.length !== 1 || !allowedRemoteUrls.has(urls[0])) throw new Error(`${releaseRemote} must have exactly one fetch and one push URL for github.com/${expectedRepository}.`);
   }
   return { commit, branch, root };
 }
@@ -107,16 +116,14 @@ function assertVersionFilesUnchanged(paths) {
   if (changes) throw new Error(`Release version files have local edits that would be overwritten; other working-tree changes are allowed:\n${changes}`);
 }
 
-function assertUnusedTag(tag, remote = "origin") {
+function assertUnusedTag(tag) {
   const ref = `refs/tags/${tag}`;
-  if (remote === "origin") {
-    const result = git(["show-ref", "--verify", "--quiet", ref]);
-    if (result.status === 0) throw new Error(`${tag} already exists locally.`);
-    if (result.status !== 1) throw new Error("Could not inspect local tags.");
-  }
-  const result = git(["ls-remote", "--exit-code", "--refs", remote, ref]);
-  if (result.status === 0) throw new Error(`${tag} already exists on ${remote}.`);
-  if (result.status !== 2) throw new Error(`Could not check tags on ${remote}; no release was started.`);
+  const local = git(["show-ref", "--verify", "--quiet", ref]);
+  if (local.status === 0) throw new Error(`${tag} already exists locally.`);
+  if (local.status !== 1) throw new Error("Could not inspect local tags.");
+  const result = git(["ls-remote", "--exit-code", "--refs", releaseRemote, ref]);
+  if (result.status === 0) throw new Error(`${tag} already exists on ${releaseRemote}.`);
+  if (result.status !== 2) throw new Error(`Could not check tags on ${releaseRemote}; no release was started.`);
 }
 
 function checkReleaseTargets(products) {
@@ -124,7 +131,7 @@ function checkReleaseTargets(products) {
     const type = gitOutput(["cat-file", "-t", `HEAD:${product.workflow}`], `The committed snapshot must contain ${product.workflow}.`);
     if (type !== "blob") throw new Error(`The committed snapshot must contain ${product.workflow} as a file.`);
     const tags = gitOutput(["tag", "--list", `${product.tagPrefix}*`], "Could not inspect local release tags.").split("\n");
-    const remoteTags = gitOutput(["ls-remote", "--refs", "--tags", "origin", `refs/tags/${product.tagPrefix}*`], `Could not check ${product.label} tags on origin.`);
+    const remoteTags = gitOutput(["ls-remote", "--refs", "--tags", releaseRemote, `refs/tags/${product.tagPrefix}*`], `Could not check ${product.label} tags on ${releaseRemote}.`);
     tags.push(...remoteTags.split("\n").map(line => line.split("\t")[1]?.replace(/^refs\/tags\//, "") ?? ""));
     for (const tag of tags) {
       if (!tag.startsWith(product.tagPrefix)) continue;
@@ -145,8 +152,8 @@ function checkReleaseTargets(products) {
 // The release workflow commits marketplace updates to the default branch, so a local branch
 // can fall behind origin without any local work; pushing the version commit would then fail.
 function assertBranchIncludesOrigin(branch) {
-  const [remoteCommit] = gitOutput(["ls-remote", "--refs", "origin", branch], "Could not read the release branch on origin; no release was started.").split("\t");
-  if (remoteCommit && git(["merge-base", "--is-ancestor", remoteCommit, "HEAD"]).status !== 0) throw new Error(`${branch.slice("refs/heads/".length)} on origin has commits this branch lacks, such as marketplace updates from the release workflow; pull them before releasing.`);
+  const [remoteCommit] = gitOutput(["ls-remote", "--refs", releaseRemote, branch], `Could not read the release branch on ${releaseRemote}; no release was started.`).split("\t");
+  if (remoteCommit && git(["merge-base", "--is-ancestor", remoteCommit, "HEAD"]).status !== 0) throw new Error(`${branch.slice("refs/heads/".length)} on ${releaseRemote} has commits this branch lacks, such as marketplace updates from the release workflow; pull them before releasing.`);
 }
 
 // The local release stages (scripts/release-local.sh); TICK_RELEASE_LOCAL replaces it in tests.
@@ -230,8 +237,8 @@ function finalizeRelease(products, state, changes, publishing) {
   for (let index = 0; index < products.length; index += maximumTagsPerPush) {
     const group = products.slice(index, index + maximumTagsPerPush);
     const refspecs = [`${commit}:${state.branch}`, ...group.map(product => `refs/tags/${product.tag}:refs/tags/${product.tag}`)];
-    const pushed = git(["push", "--porcelain", "--atomic", "origin", ...refspecs], { readOnly: false });
-    if (pushed.status !== 0) throw new Error(`Push failed; release commit ${commit} and local tags remain. Earlier tag batches may already be published. Inspect remote refs with git ls-remote origin ${state.branch} ${products.map(product => `refs/tags/${product.tag}`).join(" ")}, then retry only the missing refs with git push --atomic origin ${refspecs.join(" ")}. Do not rerun release to bump versions again. ${pushed.stderr.trim()}`);
+    const pushed = git(["push", "--porcelain", "--atomic", releaseRemote, ...refspecs], { readOnly: false });
+    if (pushed.status !== 0) throw new Error(`Push failed; release commit ${commit} and local tags remain. Earlier tag batches may already be published. Inspect remote refs with git ls-remote ${releaseRemote} ${state.branch} ${products.map(product => `refs/tags/${product.tag}`).join(" ")}, then retry only the missing refs with git push --atomic ${releaseRemote} ${refspecs.join(" ")}. Do not rerun release to bump versions again. ${pushed.stderr.trim()}`);
   }
   const tags = products.map(product => product.tag);
   const branchName = state.branch.slice("refs/heads/".length);
@@ -247,7 +254,7 @@ function finalizeRelease(products, state, changes, publishing) {
     const published = command(localStages(state.root), ["publish", localArchives(state), ...tags], { cwd: state.root, env: { ...process.env, RELEASE_BRANCH: branchName }, stdio: "inherit" });
     if (published.status !== 0) throw new Error(`Publishing failed after ${tags.join(", ")} were pushed. Fix the cause, then finish with scripts/release-local.sh publish dist/release-local ${tags.join(" ")}; it keeps what was already published. Do not rerun release to bump versions again.`);
     // The marketplace update was pushed from a separate checkout; bring this branch up to it.
-    const fetched = git(["fetch", "--quiet", "origin", branchName], { readOnly: false });
+    const fetched = git(["fetch", "--quiet", releaseRemote, branchName], { readOnly: false });
     const merged = fetched.status === 0 ? git(["merge", "--ff-only", "--quiet", "FETCH_HEAD"], { readOnly: false }) : fetched;
     if (merged.status !== 0) process.stderr.write(`Pull ${branchName} to get the marketplace update: ${merged.stderr.trim()}\n`);
     process.stdout.write(`Published ${description} and updated marketplace.json.\n`);
@@ -265,6 +272,7 @@ try {
   if (modes.length > 1 || publishings.length > 1 || modes.length + publishings.length !== args.length) throw new Error("Usage: [VERSION=X.Y.Z] [TICK_PACKAGES='longbridge futu'] node scripts/release.mjs [--local|--remote] [--check|--dry-run]");
   const mode = modes[0];
   const publishing = publishingFlags[publishings[0]];
+  assertReleaseSettings();
   const releaseLock = acquireReleaseLock();
   try {
     const initial = preflight();

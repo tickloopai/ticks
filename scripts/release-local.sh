@@ -14,6 +14,7 @@
 # machines are TICKS_LINUX_ARM64_MACHINE (default tl-arm) and TICKS_LINUX_X86_64_MACHINE (default
 # tl-x86); a missing toolchain is installed in them. This Mac needs the aarch64-apple-darwin and
 # x86_64-apple-darwin Rust targets and Rosetta, and gh logged in with write access to the repository.
+# publish fetches and pushes the marketplace through TICKS_RELEASE_REMOTE (default origin).
 set -eu
 
 arm64_machine=${TICKS_LINUX_ARM64_MACHINE:-tl-arm}
@@ -22,6 +23,7 @@ mac_targets="aarch64-apple-darwin x86_64-apple-darwin"
 tickloop_releases=https://github.com/tickloopai/homebrew-tap/releases/latest/download
 repository_root=$(CDPATH='' cd "$(dirname "$0")/.." && pwd -P)
 cache_directory=$repository_root/target/release-local
+release_remote=${TICKS_RELEASE_REMOTE:-origin}
 
 fail() {
     echo "$*" >&2
@@ -155,7 +157,7 @@ publish() {
     shift
     cd "$repository_root"
     branch=${RELEASE_BRANCH:-main}
-    git fetch --quiet origin "$branch"
+    git fetch --quiet "$release_remote" "$branch"
     checkout=$(mktemp -d "${TMPDIR:-/tmp}/ticks-marketplace.XXXXXX")
     git worktree add --quiet --detach "$checkout" FETCH_HEAD
     trap 'git worktree remove --force "$checkout" >/dev/null 2>&1 || true; rm -rf "$checkout"' EXIT
