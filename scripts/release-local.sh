@@ -45,12 +45,19 @@ machine_for() {
 
 # Runs a shell script in a Linux machine, in SOURCE, with its own Cargo target directory. This
 # Mac's ~/.cargo/config.toml is visible there through /Users, so its rustc and C compiler wrappers
-# are cleared.
+# are cleared. The machines hold no GitHub credentials, so Cargo fetches the private
+# longbridge/tickloop crates through the git CLI with this Mac's gh token, passed per command and
+# never written there.
 in_machine() {
     machine=$1
     source=$2
     script=$3
+    github_token=${github_token:-$(gh auth token)} ||
+        fail "Building in $machine needs gh logged in to fetch longbridge/tickloop."
     orb -m "$machine" env RUSTC_WRAPPER= HOST_CC=cc HOST_CXX=c++ CC_KNOWN_WRAPPER_CUSTOM= \
+        CARGO_NET_GIT_FETCH_WITH_CLI=true GIT_TERMINAL_PROMPT=0 RELEASE_GITHUB_TOKEN="$github_token" \
+        GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.https://github.com.helper \
+        GIT_CONFIG_VALUE_0='!f() { test "$1" = get && echo username=x-access-token && echo "password=$RELEASE_GITHUB_TOKEN"; }; f' \
         RELEASE_SOURCE="$source" sh -c ". \"\$HOME/.cargo/env\" 2>/dev/null || true
 export CARGO_TARGET_DIR=\$HOME/ticks-target
 cd \"\$RELEASE_SOURCE\"
